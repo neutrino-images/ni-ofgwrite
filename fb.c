@@ -616,7 +616,7 @@ int show_main_window(int show_background_image, const char* version)
 	// set background image
 	if (show_background_image && !loadBackgroundImage())
 	{ // if image not present paint black background
-		my_printf("Error: Found no background image, or image is unusable\n");
+		//NI my_printf("Error: Found no background image, or image is unusable\n");
 		paint_box(0, 0, g_screeninfo_var.xres, g_screeninfo_var.yres, BLACK);
 	}
 

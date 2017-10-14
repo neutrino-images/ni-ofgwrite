@@ -1,6 +1,6 @@
 #!/bin/sh
 
-mkdir /newroot
+mkdir -p /newroot
 mount -t tmpfs tmpfs /newroot
-cp /usr/bin/ofgwrite_bin /newroot/
+cp /bin/ofgwrite_bin /newroot/
 /newroot/ofgwrite_bin "$@"

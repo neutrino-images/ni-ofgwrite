@@ -34,7 +34,7 @@ char rootfs_ubi_device[1000];
 enum RootfsTypeEnum rootfs_type;
 char media_mounts[30][500];
 int media_mount_count = 0;
-int stop_e2_needed = 1;
+int stop_neutrino_needed = 1;
 
 
 void my_printf(char const *fmt, ...)
@@ -124,12 +124,15 @@ int find_image_files(char* p)
 				stat(kernel_filename, &kernel_file_stat);
 				my_printf("Found kernel file: %s\n", kernel_filename);
 			}
+/* //NI
 			if (strcmp(entry->d_name, "rootfs.bin") == 0			// ET-xx00, XP1000
 			 || strcmp(entry->d_name, "root_cfe_auto.bin") == 0		// Solo2
 			 || strcmp(entry->d_name, "root_cfe_auto.jffs2") == 0	// other VU boxes
 			 || strcmp(entry->d_name, "oe_rootfs.bin") == 0			// DAGS boxes
 			 || strcmp(entry->d_name, "e2jffs2.img") == 0			// Spark boxes
 			 || strcmp(entry->d_name, "rootfs.tar.bz2") == 0)		// solo4k
+*/
+			if (strcmp(entry->d_name, "rootfs.tar.bz2") == 0)
 			{
 				strcpy(rootfs_filename, path);
 				strcpy(&rootfs_filename[strlen(path)], entry->d_name);
@@ -308,9 +311,12 @@ int read_mtd_file()
 				strcpy(&kernel_device[5], kernel_mtd_device_arg);
 				if (kernel_file_stat.st_size <= devsize)
 				{
+/* //NI
 					if ((strcmp(name, "\"kernel\"") == 0
 						|| strcmp(name, "\"nkernel\"") == 0
 						|| strcmp(name, "\"kernel2\"") == 0))
+*/
+					if ((strcmp(name, "\"kernel\"") == 0))
 					{
 						if (kernel_filename[0] != '\0')
 							my_printf("  ->  %s <- User selected!!\n", kernel_filename);
@@ -338,8 +344,11 @@ int read_mtd_file()
 				if (rootfs_file_stat.st_size <= devsize
 					&& strcmp(esize, "0001f000") != 0)
 				{
+/* //NI
 					if (strcmp(name, "\"rootfs\"") == 0
 						|| strcmp(name, "\"rootfs2\"") == 0)
+*/
+					if (strcmp(name, "\"rootfs\"") == 0)
 					{
 						if (rootfs_filename[0] != '\0')
 							my_printf("  ->  %s <- User selected!!\n", rootfs_filename);
@@ -365,9 +374,13 @@ int read_mtd_file()
 				}
 			}
 			// auto kernel
+/* //NI
 			else if (!user_mtd_kernel
 					&& (strcmp(name, "\"kernel\"") == 0
 						|| strcmp(name, "\"nkernel\"") == 0))
+*/
+			else if (!user_mtd_kernel
+					&& (strcmp(name, "\"kernel\"") == 0))
 			{
 				if (found_kernel_device)
 				{
@@ -527,40 +540,41 @@ int exec_ps()
 	my_printf("Execute: ps\n");
 	if (ps_main(argc, argv) == 9999)
 	{
-		return 1; // e2 found
+		return 1; // neutrino found
 	}
-	return 0; // e2 not found
+	return 0; // neutrino not found
 }
 
-int check_e2_stopped()
+int check_neutrino_stopped()
 {
 	int time = 0;
 	int max_time = 70;
-	int e2_found = 1;
+	int neutrino_found = 1;
 
 	set_step_progress(0);
 	if (!quiet)
-		my_printf("Checking E2 is running...\n");
-	while (time < max_time && e2_found)
+		my_printf("Checking Neutrino is running...\n");
+	while (time < max_time && neutrino_found)
 	{
-		e2_found = exec_ps();
+		//neutrino_found = exec_ps(); //FIXME
+		neutrino_found = system("killall start_neutrino neutrino && sleep 3");
 
-		if (!e2_found)
+		if (!neutrino_found)
 		{
 			if (!quiet)
-				my_printf("E2 is stopped\n");
+				my_printf("Neutrino is stopped\n");
 		}
 		else
 		{
 			sleep(2);
 			time += 2;
 			if (!quiet)
-				my_printf("E2 still running\n");
+				my_printf("Neutrino still running\n");
 		}
 		set_step_progress(time * 100 / max_time);
 	}
 
-	if (e2_found)
+	if (neutrino_found)
 		return 0;
 
 	return 1;
@@ -634,22 +648,33 @@ int umount_rootfs()
 	// create directories
 	ret += chdir("/newroot");
 	ret += mkdir("/newroot/bin", 777);
+	ret += mkdir("/newroot/boot", 777); //NI
 	ret += mkdir("/newroot/dev", 777);
 	ret += mkdir("/newroot/etc", 777);
 	ret += mkdir("/newroot/dev/pts", 777);
 	ret += mkdir("/newroot/lib", 777);
 	ret += mkdir("/newroot/media", 777);
+	ret += mkdir("/newroot/mnt", 777); //NI
 	ret += mkdir("/newroot/oldroot", 777);
 	ret += mkdir("/newroot/oldroot_bind", 777);
 	ret += mkdir("/newroot/proc", 777);
 	ret += mkdir("/newroot/run", 777);
 	ret += mkdir("/newroot/sbin", 777);
+	ret += mkdir("/newroot/srv", 777); //NI
 	ret += mkdir("/newroot/sys", 777);
+	ret += mkdir("/newroot/tmp", 777); //NI
+/* //NI
 	ret += mkdir("/newroot/usr", 777);
 	ret += mkdir("/newroot/usr/lib", 777);
 	ret += mkdir("/newroot/usr/lib/autofs", 777);
+*/
 	ret += mkdir("/newroot/var", 777);
+	ret += mkdir("/newroot/var/lib", 777); //NI
+	ret += mkdir("/newroot/var/lib/nfs", 777); //NI
+	ret += mkdir("/newroot/var/samba", 777); //NI
+/* //NI
 	ret += mkdir("/newroot/var/volatile", 777);
+*/
 	if (ret != 0)
 	{
 		my_printf("Error creating necessary directories\n");
@@ -657,6 +682,9 @@ int umount_rootfs()
 	}
 
 	// we need init and libs to be able to exec init u later
+	ret =  system("cp -arf /bin/busybox*     /newroot/bin");
+	ret += system("cp -arf /bin/bash*        /newroot/bin");
+/* //NI
 	ret =  system("cp -arf /bin/busybox*     /newroot/bin");
 	ret += system("cp -arf /bin/sh*          /newroot/bin");
 	ret += system("cp -arf /bin/bash*        /newroot/bin");
@@ -695,20 +723,23 @@ int umount_rootfs()
 		sleep(5);
 		return 0;
 	}
+*/
 
-	// it can take several seconds until E2 is shut down
+	// it can take several seconds until Neutrino is shut down
 	// wait because otherwise remounting read only is not possible
-	set_step("Wait until E2 is stopped");
-	if (!check_e2_stopped())
+	set_step("Wait until Neutrino is stopped");
+	if (!check_neutrino_stopped())
 	{
-		my_printf("Error E2 can't be stopped! Abort flashing.\n");
-		set_error_text("Error E2 can't be stopped! Abort flashing.");
+		my_printf("Error Neutrino can't be stopped! Abort flashing.\n");
+		set_error_text("Error neutrio can't be stopped! Abort flashing.");
+/* //NI
 		ret = system("init 3");
+*/
 		return 0;
 	}
 	show_main_window(1, ofgwrite_version);
 	set_overall_text("Flashing image");
-	set_step_without_incr("Wait until E2 is stopped");
+	set_step_without_incr("Wait until Neutrino is stopped");
 	sleep(2);
 
 	ret = pivot_root("/newroot/", "oldroot");
@@ -717,18 +748,28 @@ int umount_rootfs()
 		my_printf("Error executing pivot_root!\n");
 		set_error_text("Error pivot_root! Abort flashing.");
 		sleep(5);
+/* //NI
 		ret = system("init 3");
+*/
 		return 0;
 	}
 
 	ret = chdir("/");
 	// move mounts to new root
 	ret =  mount("/oldroot/dev/", "dev/", NULL, MS_MOVE, NULL);
+	ret =  mount("/oldroot/boot/", "boot/", NULL, MS_MOVE, NULL); //NI
 	ret += mount("/oldroot/proc/", "proc/", NULL, MS_MOVE, NULL);
 	ret += mount("/oldroot/sys/", "sys/", NULL, MS_MOVE, NULL);
+	ret += mount("/oldroot/mnt/", "mnt/", NULL, MS_MOVE, NULL); //NI
+	ret += mount("/oldroot/srv/", "srv/", NULL, MS_MOVE, NULL); //NI
+	ret += mount("/oldroot/tmp/", "tmp/", NULL, MS_MOVE, NULL); //NI
+	ret += mount("/oldroot/var/lib/nfs/", "var/lib/nfs/", NULL, MS_MOVE, NULL); //NI
+	ret += mount("/oldroot/var/samba/", "var/samba/", NULL, MS_MOVE, NULL); //NI
+/* //NI
 	ret += mount("/oldroot/var/volatile", "var/volatile/", NULL, MS_MOVE, NULL);
 	// create link for tmp
 	ret += symlink("/var/volatile/tmp", "/tmp");
+*/
 	if (ret != 0)
 	{
 		my_printf("Error move mounts to newroot\n");
@@ -759,7 +800,10 @@ int umount_rootfs()
 	// create link for mount/umount for autofs
 	ret = symlink("/bin/busybox", "/bin/mount");
 	ret += symlink("/bin/busybox", "/bin/umount");
+	ret += symlink("/bin/busybox", "/bin/sh"); //NI
+	ret += symlink("/bin/busybox", "/sbin/init"); //NI
 
+/* //NI
 	// try to restart autofs
 	ret =  system("/bin/automount");
 	if (ret != 0)
@@ -769,6 +813,8 @@ int umount_rootfs()
 
 	// restart init process
 	ret = system("exec init u");
+*/
+	ret = system("exec init");
 	sleep(3);
 
 	// kill all remaining open processes which prevent umounting rootfs
@@ -936,7 +982,7 @@ void find_kernel_rootfs_device()
 
 	if (strcmp(rootfs_device, current_rootfs_device) != 0)
 	{
-		stop_e2_needed = 0;
+		stop_neutrino_needed = 0;
 		my_printf("Flashing currently not running image\n");
 	}
 }
@@ -1087,7 +1133,7 @@ int main(int argc, char *argv[])
 		{
 			my_printf("failed. System won't boot. Please flash backup!\n");
 			set_error_text1("Error flashing kernel. System won't boot!");
-			set_error_text2("Please flash backup! Go back to E2 in 60 sec");
+			set_error_text2("Please flash backup! Go back to Neutrino in 60 sec");
 			sleep(60);
 		}
 		closelog();
@@ -1117,8 +1163,9 @@ int main(int argc, char *argv[])
 		set_step("Killing processes");
 
 		// kill nmbd, smbd, rpc.mountd and rpc.statd -> otherwise remounting root read-only is not possible
-		if (!no_write && stop_e2_needed)
+		if (!no_write && stop_neutrino_needed)
 		{
+/* //NI
 			ret = system("killall nmbd");
 			ret = system("killall smbd");
 			ret = system("killall rpc.mountd");
@@ -1142,6 +1189,8 @@ int main(int argc, char *argv[])
 			ret = system("pkill -f DBServer.py");
 			// stop autofs
 			ret = system("/etc/init.d/autofs stop");
+*/
+			ret = system("/etc/init.d/rcK");
 			// ignore return values, because the processes might not run
 		}
 
@@ -1152,7 +1201,7 @@ int main(int argc, char *argv[])
 		sleep(1);
 
 		set_step("init 2");
-		if (!no_write && stop_e2_needed)
+		if (!no_write && stop_neutrino_needed)
 		{
 			if (!daemonize())
 			{
@@ -1168,7 +1217,7 @@ int main(int argc, char *argv[])
 			}
 		}
 		// if not running rootfs is flashed then we need to mount it before start flashing
-		if (!no_write && !stop_e2_needed && rootfs_type == EXT4)
+		if (!no_write && !stop_neutrino_needed && rootfs_type == EXT4)
 		{
 			set_step("Mount rootfs");
 			mkdir("/oldroot_bind", 777);
@@ -1208,10 +1257,10 @@ int main(int argc, char *argv[])
 
 			if (!kernel_flash(kernel_device, kernel_filename))
 			{
-				my_printf("Error flashing kernel. System won't boot. Please flash backup! Starting E2 in 60 seconds\n");
+				my_printf("Error flashing kernel. System won't boot. Please flash backup! Starting Neutrino in 60 seconds\n");
 				set_error_text1("Error flashing kernel. System won't boot!");
-				set_error_text2("Please flash backup! Starting E2 in 60 sec");
-				if (stop_e2_needed)
+				set_error_text2("Please flash backup! Starting Neutrino in 60 sec");
+				if (stop_neutrino_needed)
 				{
 					sleep(60);
 					reboot(LINUX_REBOOT_CMD_RESTART);
@@ -1230,7 +1279,7 @@ int main(int argc, char *argv[])
 			my_printf("Error flashing rootfs! System won't boot. Please flash backup! System will reboot in 60 seconds\n");
 			set_error_text1("Error flashing rootfs. System won't boot!");
 			set_error_text2("Please flash backup! Rebooting in 60 sec");
-			if (stop_e2_needed)
+			if (stop_neutrino_needed)
 			{
 				sleep(60);
 				reboot(LINUX_REBOOT_CMD_RESTART);
@@ -1241,7 +1290,7 @@ int main(int argc, char *argv[])
 		}
 
 		my_printf("Successfully flashed rootfs! Rebooting in 3 seconds...\n");
-		if (!stop_e2_needed)
+		if (!stop_neutrino_needed)
 		{
 			ret = umount("/oldroot_bind/");
 			ret = rmdir("/oldroot_bind/");
@@ -1254,7 +1303,7 @@ int main(int argc, char *argv[])
 		fflush(stdout);
 		fflush(stderr);
 		sleep(3);
-		if (!no_write && stop_e2_needed)
+		if (!no_write && stop_neutrino_needed)
 		{
 			reboot(LINUX_REBOOT_CMD_RESTART);
 		}
