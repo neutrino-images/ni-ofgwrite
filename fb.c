@@ -621,8 +621,11 @@ int show_main_window(int show_background_image, const char* version)
 	if (show_background_image && !loadBackgroundImage())
 	{ // if image not present paint black background
 		my_printf("Error: Found no background image, or image is unusable\n");
-		paint_box(0, 0, g_screeninfo_var.xres, g_screeninfo_var.yres, BLACK);
+		//NI paint_box(0, 0, g_screeninfo_var.xres, g_screeninfo_var.yres, BLACK);
 	}
+
+	//NI
+	paint_box(0, 0, g_screeninfo_var.xres, g_screeninfo_var.yres, BLACK);
 
 	// paint window
 	paint_box(g_window.x1, g_window.y1, g_window.x2, g_window.y2, BLACK);
@@ -632,6 +635,7 @@ int show_main_window(int show_background_image, const char* version)
 	char version_string[60];
 	strcpy(version_string, "written by Betacentauri  v.");
 	strcat(version_string, version);
+	strcat(version_string, "  NI-Edition"); //NI
 	set_sub_title(version_string);
 	return 1;
 }
