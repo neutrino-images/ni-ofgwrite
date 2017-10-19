@@ -546,6 +546,7 @@ int loadBackgroundImage()
 	int ret;
 
 	// search for background image
+/* //NI
 	if (access("/etc/enigma2/bootlogo.mvi", R_OK) != 0)
 		if (access("/etc/enigma2/backdrop.mvi", R_OK) != 0)
 			if (access("/usr/share/bootlogo.mvi", R_OK) != 0)
@@ -559,6 +560,9 @@ int loadBackgroundImage()
 			ret = system("/usr/bin/showiframe /etc/enigma2/backdrop.mvi");
 	else
 		ret = system("/usr/bin/showiframe /etc/enigma2/bootlogo.mvi");
+*/
+	if (access("/share/tuxbox/neutrino/icons/bootlogo.m2v", R_OK) == 0)
+		ret = system("/bin/showiframe /share/tuxbox/neutrino/icons/bootlogo.m2v");
 
 	if (ret != 0)
 		return 0;
@@ -616,7 +620,7 @@ int show_main_window(int show_background_image, const char* version)
 	// set background image
 	if (show_background_image && !loadBackgroundImage())
 	{ // if image not present paint black background
-		//NI my_printf("Error: Found no background image, or image is unusable\n");
+		my_printf("Error: Found no background image, or image is unusable\n");
 		paint_box(0, 0, g_screeninfo_var.xres, g_screeninfo_var.yres, BLACK);
 	}
 
