@@ -556,8 +556,15 @@ int check_neutrino_stopped()
 		my_printf("Checking Neutrino is running...\n");
 	while (time < max_time && neutrino_found)
 	{
-		//neutrino_found = exec_ps(); //FIXME
-		neutrino_found = system("killall start_neutrino neutrino && sleep 3");
+		//NI neutrino_found = exec_ps(); //FIXME
+
+		//NI
+		system("killall start_neutrino 2>/dev/null");
+		int ret = system("pidof neutrino >/dev/null");
+		if (ret == 0)
+			neutrino_found = system("killall neutrino && sleep 3");
+		else
+			neutrino_found = 0;
 
 		if (!neutrino_found)
 		{
