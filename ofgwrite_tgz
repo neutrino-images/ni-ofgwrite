@@ -1,0 +1,7 @@
+#!/bin/sh
+# 1st is dir where unpack, $2 is file to be processed
+
+tmp_dir=$(mktemp -d $1/XXXXXX)
+cd $tmp_dir
+tar zxvf $2
+ofgwrite $tmp_dir
