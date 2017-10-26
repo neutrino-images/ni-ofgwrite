@@ -1296,7 +1296,7 @@ int main(int argc, char *argv[])
 			return EXIT_FAILURE;
 		}
 
-		my_printf("Successfully flashed rootfs! Rebooting in 3 seconds...\n");
+		my_printf("Successfully flashed rootfs!\n"); //NI
 		if (!stop_neutrino_needed)
 		{
 			ret = umount("/oldroot_bind/");
@@ -1306,12 +1306,16 @@ int main(int argc, char *argv[])
 			set_step("Successfully flashed!");
 		}
 		else
-			set_step("Successfully flashed! Rebooting in 3 seconds");
+			set_step("Successfully flashed!"); //NI
 		fflush(stdout);
 		fflush(stderr);
 		sleep(3);
 		if (!no_write && stop_neutrino_needed)
 		{
+			//NI
+			my_printf("Rebooting in 3 seconds...\n");
+			set_step("Successfully flashed! Rebooting in 3 seconds...");
+			sleep(3);
 			reboot(LINUX_REBOOT_CMD_RESTART);
 		}
 	}
@@ -1319,5 +1323,6 @@ int main(int argc, char *argv[])
 	closelog();
 	close_framebuffer();
 
+	my_printf("Exiting with EXIT_SUCCESS\n"); //NI
 	return EXIT_SUCCESS;
 }
