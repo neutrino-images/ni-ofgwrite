@@ -136,11 +136,18 @@ int flash_ext4_rootfs(char* filename, int quiet, int no_write)
 	sync();
 
 	//NI
+	char backup_file[64] = "";
 	if (access("/backup_flash.tar.gz", F_OK) == 0)
+		strcpy(backup_file, "/backup_flash.tar.gz");
+	else if (access("/newroot/backup_flash.tar.gz", F_OK) == 0)
+		strcpy(backup_file, "/newroot/backup_flash.tar.gz");
+
+	if (backup_file[0] != '\0')
 	{
-		my_printf("Found backup_flash.tar.gz\n");
+		my_printf("Found backup in %s\n", backup_file);
+		set_step("Copying backup to rootfs");
 		mkdir("/oldroot_bind/var", 777); //needed?
-		ret = copy_file("/backup_flash.tar.gz", "/oldroot_bind/var/backup_flash.tar.gz");
+		ret = copy_file(backup_file, "/oldroot_bind/var/backup_flash.tar.gz");
 		if (ret != 0)
 			my_printf("Error copying backup_flash.tar.gz\n");
 	}
