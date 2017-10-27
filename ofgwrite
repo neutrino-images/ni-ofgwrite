@@ -2,6 +2,8 @@
 
 mkdir -p /newroot
 mount -t tmpfs tmpfs /newroot
-/bin/backup.sh /newroot backup_flash.tar.gz
+if [ -e /tmp/backup_flash.tar.gz ]; then
+	mv /tmp/backup_flash.tar.gz /newroot/
+fi
 cp /bin/ofgwrite_bin /newroot/
 /newroot/ofgwrite_bin "$@"
