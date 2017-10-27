@@ -293,7 +293,7 @@ int flashcp_main (int argc,char *argv[])
 	 * erase enough blocks so that we can write the file *
 	 *****************************************************/
 
-#warning "Check for smaller erase regions"
+//NI #warning "Check for smaller erase regions"
 
 	erase.start = 0;
 	erase.length = (filestat.st_size + mtd.erasesize - 1) / mtd.erasesize;

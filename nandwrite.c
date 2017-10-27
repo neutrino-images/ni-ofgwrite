@@ -21,7 +21,9 @@
 
 #define PROGRAM_NAME "nandwrite"
 
+#ifndef _GNU_SOURCE //NI
 #define _GNU_SOURCE
+#endif
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
