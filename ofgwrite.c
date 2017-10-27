@@ -1055,7 +1055,7 @@ int main(int argc, char *argv[])
 	// Open log
 	openlog("ofgwrite", LOG_CONS | LOG_NDELAY, LOG_USER);
 
-	my_printf("\nofgwrite Utility v%s\n", ofgwrite_version);
+	my_printf("\nofgwrite Utility v%s NI-Edition\n", ofgwrite_version); //NI
 	my_printf("Author: Betacentauri\n");
 	my_printf("Based upon: mtd-utils-native-1.5.1 and busybox 1.24.1\n");
 	my_printf("Use at your own risk! Make always a backup before use!\n");
