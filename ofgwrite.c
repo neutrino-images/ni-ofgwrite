@@ -78,7 +78,7 @@ void printUsage()
 	my_printf("   -rmmcblkxpx --rootfs=mmcblkxpx  use mmcblkxpx device for rootfs flashing\n");
 	my_printf("   -mx --multi=x         flash multiboot partition x (x= 1, 2, 3,...). Only supported by some boxes.\n");
 	my_printf("   -n --nowrite          show only found image and mtd partitions (no write)\n");
-	my_printf("   -f --force            force kill e2\n");
+	my_printf("   -f --force            force kill neutrino\n");
 	my_printf("   -q --quiet            show less output\n");
 	my_printf("   -h --help             show help\n");
 }
