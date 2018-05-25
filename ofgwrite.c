@@ -592,6 +592,20 @@ int check_neutrino_stopped()
 
 	if (neutrino_found)
 		return 0;
+	else
+	{
+		/*
+		   Reactivate correct input to make ofgrite visible again.
+		   libstb-hal set input to "aux" when cVideo is deleted.
+		*/
+		FILE *f;
+		f = fopen("/proc/stb/avs/0/input","w");
+		if (f != NULL)
+		{
+			fputs("encoder", f);
+			fclose(f);
+		}
+	}
 
 	return 1;
 }
