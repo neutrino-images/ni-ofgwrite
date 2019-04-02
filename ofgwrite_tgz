@@ -5,8 +5,17 @@ if [ $# -lt 2 ]; then
 	exit 1
 fi
 
+echo "Starting ${0##*/} $@"
+
+echo "Creating tempdir"
 tmp_dir=$(mktemp -d $1/XXXXXX)
 cd $tmp_dir
+
+echo "Untaring $2 to $tmp_dir"
 tar zxvf $2
+
+echo "Shifting options"
 shift 2
+
+echo "Calling ofgwrite $@ $tmp_dir"
 ofgwrite $@ $tmp_dir

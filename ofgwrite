@@ -1,9 +1,18 @@
 #!/bin/sh
 
+echo "Creating /newroot"
 mkdir -p /newroot
+
+echo "Mounting /newroot to tempfs"
 mount -t tmpfs tmpfs /newroot
+
+echo "Copying backup_flash.tar.gz to /newroot"
 if [ -e /tmp/backup_flash.tar.gz ]; then
 	mv /tmp/backup_flash.tar.gz /newroot/
 fi
+
+echo "Copying ofgwrite_bin to /newroot"
 cp /bin/ofgwrite_bin /newroot/
+
+echo "Calling /newroot/ofgwrite_bin $@"
 /newroot/ofgwrite_bin "$@"
