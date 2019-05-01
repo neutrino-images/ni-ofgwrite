@@ -14,13 +14,13 @@
 #include <unistd.h>
 #include <errno.h>
 
-const char ofgwrite_version[] = "4.3.0";
-int flash_kernel = 0;
-int flash_rootfs = 0;
-int no_write     = 0;
-int force        = 0;
-int quiet        = 0;
-int show_help    = 0;
+const char ofgwrite_version[] = "4.4.2";
+int flash_kernel  = 0;
+int flash_rootfs  = 0;
+int no_write      = 0;
+int force_e2_stop = 0;
+int quiet         = 0;
+int show_help     = 0;
 int newroot_mounted = 0;
 char kernel_filename[1000];
 char rootfs_filename[1000];
@@ -158,7 +158,7 @@ int read_args(int argc, char *argv[])
 												{"rootfs" , optional_argument, NULL, 'r'},
 												{"nowrite", no_argument      , NULL, 'n'},
 												{"multi"  , required_argument, NULL, 'm'},
-												{"force"  , optional_argument, NULL, 'f'},
+												{"force"  , no_argument      , NULL, 'f'},
 												{"quiet"  , no_argument      , NULL, 'q'},
 												{"help"   , no_argument      , NULL, 'h'},
 												{NULL     , no_argument      , NULL,  0} };
@@ -217,7 +217,7 @@ int read_args(int argc, char *argv[])
 				no_write = 1;
 				break;
 			case 'f':
-				force = 1;
+				force_e2_stop = 1;
 				break;
 			case 'q':
 				quiet = 1;
@@ -732,7 +732,7 @@ int umount_rootfs(int steps)
 	ret += mkdir("/newroot/media", 777);
 	ret += mkdir("/newroot/mnt", 777); //NI
 	ret += mkdir("/newroot/oldroot", 777);
-	ret += mkdir("/newroot/oldroot_bind", 777);
+	ret += mkdir("/newroot/oldroot_remount", 777);
 	ret += mkdir("/newroot/proc", 777);
 	ret += mkdir("/newroot/run", 777);
 	ret += mkdir("/newroot/sbin", 777);
@@ -995,32 +995,16 @@ int umount_rootfs(int steps)
 	else
 		my_printf("umount not successful\n");
 
-	if (!ret && rootfs_type == EXT4) // umount success and ext4 -> remount again
+	// mount oldroot to other mountpoint, because otherwise all data in not moved filesystems under /oldroot will be deleted
+	if (rootfs_type == EXT4)
 	{
-		ret = mount(rootfs_device, "/oldroot_bind/", "ext4", 0, NULL);
+		ret = mount(rootfs_device, "/oldroot_remount/", "ext4", 0, NULL);
 		if (!ret)
-			my_printf("remount to /oldroot_bind/ successful\n");
+			my_printf("remount to /oldroot_remount/ successful\n");
 		else
 		{
-			my_printf("Error mounting(bind) root! Abort flashing.\n");
-			set_error_text1("Error remounting(bind) root! Abort flashing.");
-			set_error_text2("Rebooting in 30 seconds");
-			sleep(30);
-			reboot(LINUX_REBOOT_CMD_RESTART);
-			return 0;
-		}
-	}
-	else if (ret && rootfs_type == EXT4)
-	// umount failed and ext4 -> bind mountpoint to new /oldroot_bind/
-	// Using bind because otherwise all data in not moved filesystems under /oldroot will be deleted
-	{
-		ret = mount("/oldroot/", "/oldroot_bind/", "", MS_BIND, NULL);
-		if (!ret)
-			my_printf("bind to /oldroot_bind/ successful\n");
-		else
-		{
-			my_printf("Error binding root! Abort flashing.\n");
-			set_error_text1("Error binding root! Abort flashing.");
+			my_printf("Error remounting root! Abort flashing.\n");
+			set_error_text1("Error remounting root! Abort flashing.");
 			set_error_text2("Rebooting in 30 seconds");
 			sleep(30);
 			reboot(LINUX_REBOOT_CMD_RESTART);
@@ -1032,8 +1016,8 @@ int umount_rootfs(int steps)
 		ret = mount("/oldroot/", "/oldroot/", "", MS_REMOUNT | MS_RDONLY, NULL);
 		if (ret)
 		{
-			my_printf("Error remounting root! Abort flashing.\n");
-			set_error_text1("Error remounting root! Abort flashing.");
+			my_printf("Error remounting root ro! Abort flashing.\n");
+			set_error_text1("Error remounting root ro! Abort flashing.");
 			set_error_text2("Rebooting in 30 seconds");
 			sleep(30);
 			reboot(LINUX_REBOOT_CMD_RESTART);
@@ -1077,6 +1061,25 @@ void ext4_rootfs_dev_found(const char* dev, int partition_number)
 	my_printf("Using %s as rootfs device\n", rootfs_device);
 }
 
+void find_store_substring(char* src, char* cmp, char* dest)
+{
+	char* pos;
+	char* pos2;
+
+	if ((pos = strstr(src, cmp)) != NULL)
+	{
+		if ((pos2 = strstr(pos, " ")) != NULL)
+		{
+			strncpy(dest, pos + strlen(cmp), pos2-pos-strlen(cmp));
+			dest[pos2-pos-strlen(cmp)] = '\0';
+		}
+		else
+		{
+			strcpy(dest, pos + strlen(cmp));
+		}
+	}
+}
+
 /* Reads /proc/cmdline to distinguish whether current running image should be flashed.
  * It also tries to read block device partition table from cmdline.
  */
@@ -1094,29 +1097,24 @@ void readProcCmdline()
 
 	char line[4096];
 	char* pos;
-	char* pos2;
 	memset(current_rootfs_device, 0, sizeof(current_rootfs_device));
+	memset(current_kernel_device, 0, sizeof(current_kernel_device));
+	memset(current_rootfs_sub_dir, 0, sizeof(current_rootfs_sub_dir));
 
 	if (fgets(line, 4096, f) != NULL)
 	{
-		if ((pos = strstr(line, "root=")) != NULL)
-		{
-			if ((pos2 = strstr(pos, " ")) != NULL)
-			{
-				strncpy(current_rootfs_device, pos + 5, pos2-pos-5);
-				current_rootfs_device[pos2-pos-5] = '\0';
-			}
-			else
-			{
-				strcpy(current_rootfs_device, pos + 5);
-			}
-		}
+		find_store_substring(line, "root=", current_rootfs_device);
+		find_store_substring(line, "kernel=", current_kernel_device);
+		find_store_substring(line, "rootsubdir=", current_rootfs_sub_dir);
+		my_printf("Current rootfs is: %s\n", current_rootfs_device);
+		my_printf("Current kernel is: %s\n", current_kernel_device);
+		my_printf("Current root sub dir is: %s\n", current_rootfs_sub_dir);
+		my_printf("\n");
 		if ((pos = strstr(line, "blkdevparts=")) != NULL)
 		{
 			parse_cmdline_partition_table(pos + 12);
 		}
 	}
-	my_printf("Current rootfs is: %s\n", current_rootfs_device);
 	fclose(f);
 }
 
@@ -1153,9 +1151,20 @@ void find_kernel_rootfs_device()
 	}
 	if (user_rootfs)
 	{
+		if (current_rootfs_sub_dir[0] != '\0' && multiboot_partition == -1) // box with rootSubDir feature
+		{
+			found_rootfs_device = 0;
+			my_printf("Error: In case of rootSubDir multiboot with user defined rootfs -m parameter is mandatory\n", rootfs_device);
+			return;
+		}
+
 		found_rootfs_device = 1;
 		sprintf(rootfs_device, "/dev/%s", rootfs_device_arg);
 		my_printf("Using %s as rootfs device\n", rootfs_device);
+		if (current_rootfs_sub_dir[0] != '\0')
+		{
+			sprintf(rootfs_sub_dir, "linuxrootfs%d", multiboot_partition);
+		}
 	}
 
 	if (!found_kernel_device)
@@ -1170,7 +1179,10 @@ void find_kernel_rootfs_device()
 		return;
 	}
 
-	if (strcmp(rootfs_device, current_rootfs_device) != 0 && !force)
+	if  (((current_rootfs_sub_dir[0] == '\0' && strcmp(rootfs_device, current_rootfs_device) != 0) ||
+		  ( current_rootfs_sub_dir[0] != '\0' && strcmp(current_rootfs_sub_dir, rootfs_sub_dir) != 0 )
+		 ) && !force_e2_stop
+		)
 	{
 		stop_neutrino_needed = 0;
 		my_printf("Flashing currently not running image\n");
@@ -1428,11 +1440,11 @@ int main(int argc, char *argv[])
 		if (!no_write && !stop_neutrino_needed && rootfs_type == EXT4)
 		{
 			set_step("Mount rootfs");
-			mkdir("/oldroot_bind", 777);
+			mkdir("/oldroot_remount", 777);
 			// mount rootfs device
-			ret = mount(rootfs_device, "/oldroot_bind/", "ext4", 0, NULL);
+			ret = mount(rootfs_device, "/oldroot_remount/", "ext4", 0, NULL);
 			if (!ret)
-				my_printf("Mount to /oldroot_bind/ successful\n");
+				my_printf("Mount to /oldroot_remount/ successful\n");
 			else if (errno == EINVAL)
 			{
 				// most likely partition is not formatted -> format it
@@ -1442,14 +1454,14 @@ int main(int argc, char *argv[])
 				ret = system(mkfs_cmd);
 				if (!ret)
 				{ // try to mount it again
-					ret = mount(rootfs_device, "/oldroot_bind/", "ext4", 0, NULL);
+					ret = mount(rootfs_device, "/oldroot_remount/", "ext4", 0, NULL);
 					if (!ret)
-						my_printf("Mount to /oldroot_bind/ successful\n");
+						my_printf("Mount to /oldroot_remount/ successful\n");
 				}
 			}
 			if (ret)
 			{
-				my_printf("Error mounting root! Abort flashing.\n");
+				my_printf("Error remounting root! Abort flashing.\n");
 				set_error_text1("Error mounting root! Abort flashing.");
 				sleep(3);
 				close_framebuffer();
@@ -1500,8 +1512,8 @@ int main(int argc, char *argv[])
 		my_printf("Successfully flashed rootfs!\n"); //NI
 		if (!stop_neutrino_needed)
 		{
-			ret = umount("/oldroot_bind/");
-			ret = rmdir("/oldroot_bind/");
+			ret = umount("/oldroot_remount/");
+			ret = rmdir("/oldroot_remount/");
 			ret = umount("/newroot/");
 			ret = rmdir("/newroot/");
 			set_step("Successfully flashed!");
