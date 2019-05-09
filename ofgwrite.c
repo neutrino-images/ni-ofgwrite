@@ -117,7 +117,11 @@ int find_image_files(char* p)
 		{
 			if ((strstr(entry->d_name, "kernel") != NULL
 			  && strstr(entry->d_name, ".bin")   != NULL)			// ET-xx00, XP1000, VU boxes, DAGS boxes
-			 || strcmp(entry->d_name, "uImage") == 0)				// Spark boxes
+			 || strcmp(entry->d_name, "uImage") == 0			// Spark boxes
+			 || (strcmp(entry->d_name, "kernel1_auto.bin") == 0 && !strcmp(vumodel, "solo4k") && multiboot_partition == 1)	// solo4k multiboot
+			 || (strcmp(entry->d_name, "kernel2_auto.bin") == 0 && !strcmp(vumodel, "solo4k") && multiboot_partition == 2)	// solo4k multiboot
+			 || (strcmp(entry->d_name, "kernel3_auto.bin") == 0 && !strcmp(vumodel, "solo4k") && multiboot_partition == 3)	// solo4k multiboot
+			 || (strcmp(entry->d_name, "kernel4_auto.bin") == 0 && !strcmp(vumodel, "solo4k") && multiboot_partition == 4))	// solo4k multiboot
 			{
 				strcpy(kernel_filename, path);
 				strcpy(&kernel_filename[strlen(path)], entry->d_name);
@@ -133,7 +137,11 @@ int find_image_files(char* p)
 			 || strcmp(entry->d_name, "rootfs.tar.bz2") == 0		// solo4k
 			 || strcmp(entry->d_name, "rootfs.ubi") == 0)			// Zgemma H9
 */
-			if (strcmp(entry->d_name, "rootfs.tar.bz2") == 0)
+			if (strcmp(entry->d_name, "rootfs.tar.bz2") == 0
+			 || (strcmp(entry->d_name, "rootfs1.tar.bz2") == 0 && !strcmp(vumodel, "solo4k") && multiboot_partition == 1)	// solo4k multiboot
+			 || (strcmp(entry->d_name, "rootfs2.tar.bz2") == 0 && !strcmp(vumodel, "solo4k") && multiboot_partition == 2)	// solo4k multiboot
+			 || (strcmp(entry->d_name, "rootfs3.tar.bz2") == 0 && !strcmp(vumodel, "solo4k") && multiboot_partition == 3)	// solo4k multiboot
+			 || (strcmp(entry->d_name, "rootfs4.tar.bz2") == 0 && !strcmp(vumodel, "solo4k") && multiboot_partition == 4))	// solo4k multiboot
 			{
 				strcpy(rootfs_filename, path);
 				strcpy(&rootfs_filename[strlen(path)], entry->d_name);
@@ -1164,6 +1172,22 @@ void find_kernel_rootfs_device()
 		sprintf(kernel_device, "/dev/%s", kernel_device_arg);
 		my_printf("Using %s as kernel device\n", kernel_device);
 	}
+
+	if (!strcmp(vumodel, "solo4k") && multiboot_partition)
+	{
+		if (multiboot_partition == 1)
+			strcpy(kernel_device, "/dev/mmcblk0p4");
+		else if (multiboot_partition == 2)
+			strcpy(kernel_device, "/dev/mmcblk0p6");
+		else if (multiboot_partition == 3)
+			strcpy(kernel_device, "/dev/mmcblk0p8");
+		else if (multiboot_partition == 4)
+			strcpy(kernel_device, "/dev/mmcblk0p10");
+		my_printf("Using %s as kernel device\n", kernel_device);
+		found_kernel_device = 1;
+		kernel_flash_mode = TARBZ2;
+	}
+
 	if (user_rootfs)
 	{
 		if (current_rootfs_sub_dir[0] != '\0' && multiboot_partition == -1) // box with rootSubDir feature
@@ -1181,6 +1205,21 @@ void find_kernel_rootfs_device()
 		{
 			sprintf(rootfs_sub_dir, "linuxrootfs%d", multiboot_partition);
 		}
+	}
+
+	if (!strcmp(vumodel, "solo4k") && multiboot_partition)
+	{
+		if (multiboot_partition == 1)
+			strcpy(rootfs_device, "/dev/mmcblk0p5");
+		else if (multiboot_partition == 2)
+			strcpy(rootfs_device, "/dev/mmcblk0p7");
+		else if (multiboot_partition == 3)
+			strcpy(rootfs_device, "/dev/mmcblk0p9");
+		else if (multiboot_partition == 4)
+			strcpy(rootfs_device, "/dev/mmcblk0p11");
+		my_printf("Using %s as rootfs device\n", rootfs_device);
+		found_rootfs_device = 1;
+		rootfs_flash_mode = TARBZ2;
 	}
 
 	if  (((current_rootfs_sub_dir[0] == '\0' && strcmp(rootfs_device, current_rootfs_device) != 0) ||
@@ -1266,10 +1305,21 @@ int main(int argc, char *argv[])
 	exit(EXIT_FAILURE);
 #endif
 
+	FILE *fvu = fopen("/proc/stb/info/vumodel", "r");
+	if (fvu) {
+		char tmp[63];
+		if (fscanf(fvu, "%s", &tmp) == 1) {
+			strcpy(vumodel, tmp);
+		}
+		fclose(fvu);
+	}
+
 	// Open log
 	openlog("ofgwrite", LOG_CONS | LOG_NDELAY, LOG_USER);
 
 	my_printf("\nofgwrite Utility v%s NI-Edition\n", ofgwrite_version); //NI
+	if (fvu)
+		my_printf("Found vuplus stb: %s\n", vumodel);
 	my_printf("Author: Betacentauri\n");
 	my_printf("Based upon: mtd-utils-native-1.5.1 and busybox 1.24.1\n");
 	my_printf("Use at your own risk! Make always a backup before use!\n");
@@ -1363,7 +1413,7 @@ int main(int argc, char *argv[])
 		ret = 0;
 
 		// Check whether /newroot exists and is mounted as tmpfs
-		if (!check_env())
+		if (!check_env() && (!strcmp(current_rootfs_device, "sda") || !strcmp(current_rootfs_device, "sdb")))
 		{
 			closelog();
 			return EXIT_FAILURE;

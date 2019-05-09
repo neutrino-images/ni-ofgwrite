@@ -17,6 +17,7 @@ int multiboot_partition;
 char current_rootfs_device[1000];
 char current_kernel_device[1000];
 char current_rootfs_sub_dir[1000];
+char vumodel[63];
 
 void handle_busybox_fatal_error();
 
