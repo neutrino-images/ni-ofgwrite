@@ -159,8 +159,11 @@ int flash_ext4_rootfs(char* filename, int quiet, int no_write)
 	{
 		my_printf("Found backup in %s\n", backup_file);
 		set_step("Copying backup to rootfs");
-		mkdir("/oldroot_bind/var", 777); //needed?
-		ret = copy_file(backup_file, "/oldroot_bind/var/backup_flash.tar.gz");
+		strcat(path, "/var");
+		mkdir(path, 777); //needed?
+		strcat(path, "/backup_flash.tar.gz");
+		my_printf("Copy path: %s\n", path);
+		ret = copy_file(backup_file, path);
 		if (ret != 0)
 			my_printf("Error copying backup_flash.tar.gz\n");
 	}
