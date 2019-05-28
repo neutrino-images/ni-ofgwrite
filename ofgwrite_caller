@@ -1,0 +1,31 @@
+#!/bin/sh
+
+if [ $# -lt 2 ]; then
+	echo "[${0##*/}] Usage: $0 <update-dir> <update-package> [options]"
+	exit 1
+fi
+
+echo "Starting ${0##*/} $@"
+
+echo "Creating tempdir"
+workdir=$(mktemp -d $1/XXXXXX)
+cd $workdir
+
+echo "Unpacking $2 to $workdir"
+if [ "${2##*.}" = "tgz" ]; then
+	tar zxvf $2
+elif [ "${2##*.}" = "zip" ]; then
+	unzip -o $2
+	imagedir=$(grep "^imagedir=" /.version | cut -d'=' -f2)
+	if [ -d $imagedir ]; then
+		workdir=$workdir/$imagedir
+	fi
+else
+	exit 1
+fi
+
+echo "Shifting options"
+shift 2
+
+echo "Calling ofgwrite $@ $workdir"
+#ofgwrite $@ $workdir
