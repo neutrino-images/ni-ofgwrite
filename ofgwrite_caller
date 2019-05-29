@@ -28,4 +28,4 @@ echo "Shifting options"
 shift 2
 
 echo "Calling ofgwrite $@ $workdir"
-#ofgwrite $@ $workdir
+ofgwrite $@ $workdir
