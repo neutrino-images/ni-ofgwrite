@@ -15,8 +15,8 @@ echo "Unpacking $2 to $workdir"
 if [ "${2##*.}" = "tgz" ]; then
 	tar zxvf $2
 elif [ "${2##*.}" = "zip" ]; then
-	unzip -o $2
 	imagedir=$(grep "^imagedir=" /.version | cut -d'=' -f2)
+	unzip -o $2 -x $imagedir/disk.img
 	if [ -d $imagedir ]; then
 		workdir=$workdir/$imagedir
 	fi
