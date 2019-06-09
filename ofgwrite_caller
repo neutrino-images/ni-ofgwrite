@@ -20,6 +20,11 @@ else
 	exit 1
 fi
 
+if [ "$1" == "/tmp" ];then
+	echo "Delete: $2"
+	rm -f $2
+fi
+
 echo "Shifting options"
 shift 2
 
