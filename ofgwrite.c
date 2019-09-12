@@ -137,7 +137,7 @@ int find_image_files(char* p)
 			 || strcmp(entry->d_name, "rootfs.tar.bz2") == 0		// solo4k
 			 || strcmp(entry->d_name, "rootfs.ubi") == 0)			// Zgemma H9
 */
-			 || strcmp(entry->d_name, "rootfs.tar.bz2") == 0		// vusolo4k/vuduo4k/vuultimo4k/vuzero4k/hd51
+			if (strcmp(entry->d_name, "rootfs.tar.bz2") == 0		// vusolo4k/vuduo4k/vuultimo4k/vuzero4k/hd51
 			 || (strcmp(entry->d_name, "rootfs1.tar.bz2") == 0 && (!strcmp(vumodel, "solo4k") || !strcmp(vumodel, "duo4k") || !strcmp(vumodel, "ultimo4k") || !strcmp(vumodel, "zero4k")) && multiboot_partition == 1)	// vusolo4k/vuduo4k/vuultimo4k/vuzero4k multiboot
 			 || (strcmp(entry->d_name, "rootfs2.tar.bz2") == 0 && (!strcmp(vumodel, "solo4k") || !strcmp(vumodel, "duo4k") || !strcmp(vumodel, "ultimo4k") || !strcmp(vumodel, "zero4k")) && multiboot_partition == 2)	// vusolo4k/vuduo4k/vuultimo4k/vuzero4k multiboot
 			 || (strcmp(entry->d_name, "rootfs3.tar.bz2") == 0 && (!strcmp(vumodel, "solo4k") || !strcmp(vumodel, "duo4k") || !strcmp(vumodel, "ultimo4k") || !strcmp(vumodel, "zero4k")) && multiboot_partition == 3)	// vusolo4k/vuduo4k/vuultimo4k/vuzero4k multiboot
