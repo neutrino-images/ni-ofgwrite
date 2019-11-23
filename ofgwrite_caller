@@ -28,5 +28,40 @@ fi
 echo "Shifting options"
 shift 2
 
+echo "Check for VU+ 4K"
+model=`cat /proc/stb/info/model`
+[ -e /proc/stb/info/vumodel ] && vumodel=`cat /proc/stb/info/vumodel`
+[ "$model" == "dm8000" ] && [ "$vumodel" == "solo4k" ] && model=$vumodel
+[ "$model" == "dm8000" ] && [ "$vumodel" == "duo4k" ] && model=$vumodel
+[ "$model" == "dm8000" ] && [ "$vumodel" == "ultimo4k" ] && model=$vumodel
+[ "$model" == "dm8000" ] && [ "$vumodel" == "uno4k" ] && model=$vumodel
+[ "$model" == "dm8000" ] && [ "$vumodel" == "uno4kse" ] && model=$vumodel
+[ "$model" == "dm8000" ] && [ "$vumodel" == "zero4k" ] && model=$vumodel
+
+case $model in
+	solo4k|duo4k|ultimo4k|uno4k|uno4kse|zero4k)
+		echo "VU+ 4K model found, rename kernel and root"
+		PART=`echo $@ | grep "\-m" | cut -d "m" -f2 | cut -d " " -f1`
+		echo "PART=$PART"
+		[ -e $workdir/kernel?_auto.bin ] && mv $workdir/kernel?_auto.bin $workdir/kernel${PART}_auto.bin
+		[ -e $workdir/kernel_auto.bin -a -e /boot/STARTUP ] && mv $workdir/kernel_auto.bin $workdir/kernel${PART}_auto.bin
+		[ -e $workdir/rootfs?.tar.bz2 ] && mv $workdir/rootfs?.tar.bz2 $workdir/rootfs${PART}.tar.bz2
+		[ -e $workdir/rootfs.tar.bz2 -a -e /boot/STARTUP ] && mv $workdir/rootfs.tar.bz2 $workdir/rootfs${PART}.tar.bz2
+	;;
+	*)
+		echo "No VU+ 4K model" ;;
+esac
+
 echo "Calling ofgwrite $@ $workdir"
 ofgwrite $@ $workdir
+
+cd /tmp
+
+#echo "Unmounting /newroot"
+#umount /newroot
+
+#echo "Removing /newroot"
+#rm -rf /newroot
+
+#echo "Removing tempdir"
+#rm -rf $workdir
