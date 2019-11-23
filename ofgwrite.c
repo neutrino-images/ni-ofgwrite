@@ -788,7 +788,9 @@ int umount_rootfs(int steps)
 
 	// we need init and libs to be able to exec init u later
 	ret =  system("cp -arf /bin/busybox*     /newroot/bin");
+	ret += system("cp -arf /bin/sh*          /newroot/bin");
 	ret += system("cp -arf /bin/bash*        /newroot/bin");
+	ret += system("cp -arf /sbin/init*       /newroot/sbin");
 
 /* //NI
 	if (multilib)
@@ -880,7 +882,9 @@ int umount_rootfs(int steps)
 		ret += system("cp -arf /etc/resolv*      /newroot/etc");
 	}
 
-	// Switch to user mode 1
+*/
+
+	// Switch to user mode 2
 	my_printf("Switching to user mode 2\n");
 	ret = system("init 2");
 	if (ret)
@@ -890,7 +894,6 @@ int umount_rootfs(int steps)
 		sleep(5);
 		return 0;
 	}
-*/
 
 	// it can take several seconds until Neutrino is shut down
 	// wait because otherwise remounting read only is not possible
@@ -898,20 +901,18 @@ int umount_rootfs(int steps)
 	if (!check_neutrino_stopped())
 	{
 		my_printf("Error Neutrino can't be stopped! Abort flashing.\n");
-		set_error_text("Error neutrio can't be stopped! Abort flashing.");
-/* //NI
+		set_error_text("Error neutrino can't be stopped! Abort flashing.");
 		ret = system("init 3");
-*/
 		return 0;
 	}
 
-	// some boxes don't allow to open framebuffer while e2 is running
+	// some boxes don't allow to open framebuffer while neutrino is running
 	// reopen framebuffer to show the GUI
 	close_framebuffer();
 	init_framebuffer(steps);
 	show_main_window(1, ofgwrite_version);
 	set_overall_text("Flashing image");
-	set_step_without_incr("Wait until Neutrino is stopped");
+	set_step_without_incr("Start flashing");
 	sleep(2);
 
 	ret = pivot_root("/newroot/", "oldroot");
@@ -920,9 +921,7 @@ int umount_rootfs(int steps)
 		my_printf("Error executing pivot_root!\n");
 		set_error_text("Error pivot_root! Abort flashing.");
 		sleep(5);
-/* //NI
 		ret = system("init 3");
-*/
 		return 0;
 	}
 
@@ -981,8 +980,6 @@ int umount_rootfs(int steps)
 	// create link for mount/umount for autofs
 	ret = symlink("/bin/busybox", "/bin/mount");
 	ret += symlink("/bin/busybox", "/bin/umount");
-	ret += symlink("/bin/busybox", "/bin/sh"); //NI
-	ret += symlink("/bin/busybox", "/sbin/init"); //NI
 
 /* //NI
 	// try to restart autofs
@@ -992,10 +989,9 @@ int umount_rootfs(int steps)
 		my_printf("Error starting autofs\n");
 	}
 
+*/
 	// restart init process
 	ret = system("exec init u");
-*/
-	ret = system("exec init");
 	sleep(3);
 
 	// kill all remaining open processes which prevent umounting rootfs
@@ -1517,9 +1513,11 @@ int main(int argc, char *argv[])
 			// kill VMC
 			ret = system("pkill -f vmc.sh");
 			ret = system("pkill -f DBServer.py");
+*/
+			// stop samba
+			ret = system("/etc/init.d/samba stop");
 			// stop autofs
 			ret = system("/etc/init.d/autofs stop");
-*/
 			ret = system("/etc/init.d/rcK");
 			// ignore return values, because the processes might not run
 		}
