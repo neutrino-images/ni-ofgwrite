@@ -20,7 +20,7 @@ else
 	exit 1
 fi
 
-if [ "$1" == "/tmp" ];then
+if [ "${2:0:5}" == "/tmp/" ]; then
 	echo "Delete: $2"
 	rm -f $2
 fi
