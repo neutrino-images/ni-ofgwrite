@@ -28,29 +28,36 @@ fi
 echo "Shifting options"
 shift 2
 
-echo "Check for VU+ 4K"
-model=`cat /proc/stb/info/model`
-[ -e /proc/stb/info/vumodel ] && vumodel=`cat /proc/stb/info/vumodel`
-[ "$model" == "dm8000" ] && [ "$vumodel" == "solo4k" ] && model=$vumodel
-[ "$model" == "dm8000" ] && [ "$vumodel" == "duo4k" ] && model=$vumodel
-[ "$model" == "dm8000" ] && [ "$vumodel" == "ultimo4k" ] && model=$vumodel
-[ "$model" == "dm8000" ] && [ "$vumodel" == "uno4k" ] && model=$vumodel
-[ "$model" == "dm8000" ] && [ "$vumodel" == "uno4kse" ] && model=$vumodel
-[ "$model" == "dm8000" ] && [ "$vumodel" == "zero4k" ] && model=$vumodel
-
-case $model in
-	solo4k|duo4k|ultimo4k|uno4k|uno4kse|zero4k)
-		echo "VU+ 4K model found, rename kernel and root"
-		PART=`echo $@ | grep "\-m" | cut -d "m" -f2 | cut -d " " -f1`
-		echo "PART=$PART"
-		[ -e $workdir/kernel?_auto.bin ] && mv $workdir/kernel?_auto.bin $workdir/kernel${PART}_auto.bin
-		[ -e $workdir/kernel_auto.bin -a -e /boot/STARTUP ] && mv $workdir/kernel_auto.bin $workdir/kernel${PART}_auto.bin
-		[ -e $workdir/rootfs?.tar.bz2 ] && mv $workdir/rootfs?.tar.bz2 $workdir/rootfs${PART}.tar.bz2
-		[ -e $workdir/rootfs.tar.bz2 -a -e /boot/STARTUP ] && mv $workdir/rootfs.tar.bz2 $workdir/rootfs${PART}.tar.bz2
-	;;
-	*)
-		echo "No VU+ 4K model" ;;
-esac
+if [ -e /boot/STARTUP ]; then
+	echo "Check for VU+ 4K"
+	model=`cat /proc/stb/info/model`
+	[ -e /proc/stb/info/vumodel ] && vumodel=`cat /proc/stb/info/vumodel`
+	[ "$model" == "dm8000" ] && [ "$vumodel" == "solo4k" ] && model=$vumodel
+	[ "$model" == "dm8000" ] && [ "$vumodel" == "duo4k" ] && model=$vumodel
+	[ "$model" == "dm8000" ] && [ "$vumodel" == "ultimo4k" ] && model=$vumodel
+	[ "$model" == "dm8000" ] && [ "$vumodel" == "uno4k" ] && model=$vumodel
+	[ "$model" == "dm8000" ] && [ "$vumodel" == "uno4kse" ] && model=$vumodel
+	[ "$model" == "dm8000" ] && [ "$vumodel" == "zero4k" ] && model=$vumodel
+	case $model in
+		solo4k|duo4k|ultimo4k|uno4k|uno4kse|zero4k)
+			echo "VU+ 4K model found."
+			PART=`echo $@ | grep "\-m" | cut -d "m" -f2 | cut -d " " -f1`
+			echo "PART=$PART"
+			if [ "$PART" != "" ]; then
+				echo "VU+ 4K - multi part - renaming kernel and root to kernel${PART}_auto.bin and rootfs${PART}.tar.bz2."
+				[ -e $workdir/kernel1_auto.bin -o -e $workdir/kernel2_auto.bin -o -e $workdir/kernel3_auto.bin -o -e $workdir/kernel4_auto.bin ] && [ -e $workdir/kernel_auto.bin ] && rm $workdir/kernel_auto.bin* && find $workdir -name "kernel?_auto.bin" -exec mv -f {} $workdir/kernel${PART}_auto.bin \; || mv -f $workdir/kernel_auto.bin $workdir/kernel${PART}_auto.bin
+				[ -e $workdir/kernel1_auto.bin -o -e $workdir/kernel2_auto.bin -o -e $workdir/kernel3_auto.bin -o -e $workdir/kernel4_auto.bin ] && find $workdir -name "kernel?_auto.bin" -exec mv -f {} $workdir/kernel${PART}_auto.bin \; || mv -f $workdir/kernel_auto.bin $workdir/kernel${PART}_auto.bin
+				[ -e $workdir/rootfs1.tar.bz2 -o -e $workdir/rootfs2.tar.bz2 -o -e $workdir/rootfs3.tar.bz2 -o -e $workdir/rootfs4.tar.bz2 ] && [ -e $workdir/rootfs.tar.bz2 ] && rm $workdir/rootfs.tar.bz2* && find $workdir -name "rootfs?.tar.bz2" -exec mv -f {} $workdir/rootfs${PART}.tar.bz2 \; || mv -f $workdir/rootfs.tar.bz2 $workdir/rootfs${PART}.tar.bz2
+				[ -e $workdir/rootfs1.tar.bz2 -o -e $workdir/rootfs2.tar.bz2 -o -e $workdir/rootfs3.tar.bz2 -o -e $workdir/rootfs4.tar.bz2 ] && find $workdir -name "rootfs?.tar.bz2" -exec mv -f {} $workdir/rootfs${PART}.tar.bz2 \; || mv -f $workdir/rootfs.tar.bz2 $workdir/rootfs${PART}.tar.bz2
+			else
+				echo "VU+ 4K - no multi part."
+			fi
+		;;
+		*)
+			echo "No VU+ 4K model."
+		;;
+	esac
+fi
 
 echo "Calling ofgwrite $@ $workdir"
 ofgwrite $@ $workdir
