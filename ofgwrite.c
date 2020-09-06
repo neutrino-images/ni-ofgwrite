@@ -14,6 +14,29 @@
 #include <unistd.h>
 #include <errno.h>
 
+struct stat kernel_file_stat;
+struct stat rootfs_file_stat;
+
+char kernel_device_arg[1000];
+char rootfs_device_arg[1000];
+char kernel_device[1000];
+char rootfs_device[1000];
+char rootfs_sub_dir[1000];
+
+int found_kernel_device;
+int found_rootfs_device;
+int user_kernel;
+int user_rootfs;
+int rootsubdir_check;
+int multiboot_partition;
+char current_rootfs_device[1000];
+char current_kernel_device[1000];
+char current_rootfs_sub_dir[1000];
+char vumodel[63];
+
+enum FlashModeTypeEnum kernel_flash_mode;
+enum FlashModeTypeEnum rootfs_flash_mode;
+
 const char ofgwrite_version[] = "4.5.6";
 int flash_kernel  = 0;
 int flash_rootfs  = 0;
