@@ -6,8 +6,8 @@ mkdir -p /newroot
 echo "Mounting /newroot to tempfs"
 mount -t tmpfs tmpfs /newroot
 
-echo "Copying backup_flash.tar.gz to /newroot"
 if [ -e /tmp/backup_flash.tar.gz ]; then
+	echo "Moving /tmp/backup_flash.tar.gz to /newroot"
 	mv /tmp/backup_flash.tar.gz /newroot/
 fi
 
