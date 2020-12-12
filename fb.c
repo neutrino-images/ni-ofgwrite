@@ -576,8 +576,7 @@ int loadBackgroundImage()
 	else
 		ret = system("/usr/bin/showiframe /etc/enigma2/bootlogo.mvi");
 */
-	if (access("/share/tuxbox/neutrino/icons/bootlogo.m2v", R_OK) == 0)
-		ret = system("/bin/showiframe /share/tuxbox/neutrino/icons/bootlogo.m2v");
+	ret = system("showiframe.sh bootlogo.m2v");
 
 	if (ret != 0)
 		return 0;
