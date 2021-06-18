@@ -30,6 +30,7 @@
 #include <stdint.h>
 #include <errno.h>
 #include <sys/types.h>
+#include <sys/sysmacros.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <mtd/mtd-user.h>
