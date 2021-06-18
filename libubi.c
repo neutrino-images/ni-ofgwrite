@@ -36,7 +36,6 @@
 #include <libubi.h>
 #include "libubi_int.h"
 #include "common.h"
-#include <sys/sysmacros.h>
 
 /**
  * mkpath - compose full path from 2 given components.

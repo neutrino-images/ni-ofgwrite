@@ -144,7 +144,6 @@
 //applet:IF_TAR(APPLET(tar, BB_DIR_BIN, BB_SUID_DROP))
 //kbuild:lib-$(CONFIG_TAR) += tar.o
 
-#include <sys/sysmacros.h>
 #include <fnmatch.h>
 #include "libbb.h"
 #include "bb_archive.h"
