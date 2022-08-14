@@ -790,6 +790,7 @@ int umount_rootfs(int steps)
 	ret += mkdir("/newroot/usr/lib/autofs", 777);
 */
 	ret += mkdir("/newroot/var", 777);
+	ret += mkdir("/newroot/var/run", 777); //NI
 	ret += mkdir("/newroot/var/lib", 777); //NI
 	ret += mkdir("/newroot/var/lib/nfs", 777); //NI
 	ret += mkdir("/newroot/var/samba", 777); //NI
@@ -963,6 +964,7 @@ int umount_rootfs(int steps)
 	ret += mount("/oldroot/mnt/", "mnt/", NULL, MS_MOVE, NULL); //NI
 	ret += mount("/oldroot/srv/", "srv/", NULL, MS_MOVE, NULL); //NI
 	ret += mount("/oldroot/tmp/", "tmp/", NULL, MS_MOVE, NULL); //NI
+	ret += mount("/oldroot/var/run/", "var/run/", NULL, MS_MOVE, NULL); //NI
 	ret += mount("/oldroot/var/lib/nfs/", "var/lib/nfs/", NULL, MS_MOVE, NULL); //NI
 	ret += mount("/oldroot/var/samba/", "var/samba/", NULL, MS_MOVE, NULL); //NI
 /* //NI
