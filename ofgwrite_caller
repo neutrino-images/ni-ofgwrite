@@ -63,17 +63,13 @@ fi
 echo "Calling ofgwrite $@ $workdir"
 ofgwrite $@ $workdir
 
-while pidof ofgwrite; do
-	sleep 5
-done
-
 cd /tmp
 
-echo "Unmounting /newroot"
-umount /newroot
+#echo "Unmounting /newroot"
+#umount /newroot
 
-echo "Removing /newroot"
-rm -rf /newroot
+#echo "Removing /newroot"
+#rm -rf /newroot
 
-echo "Removing tempdir"
-rm -rf $workdir
+#echo "Removing tempdir"
+#rm -rf $workdir
