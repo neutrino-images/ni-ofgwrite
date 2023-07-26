@@ -14,6 +14,8 @@
 #include <unistd.h>
 #include <errno.h>
 
+#include "busybox/include/libbb.h"
+
 struct stat kernel_file_stat;
 struct stat rootfs_file_stat;
 
@@ -27,8 +29,10 @@ int found_kernel_device;
 int found_rootfs_device;
 int user_kernel;
 int user_rootfs;
+int user_slotname;
 int rootsubdir_check;
 int multiboot_partition;
+char kexec_mode[1000];
 char current_rootfs_device[1000];
 char current_kernel_device[1000];
 char current_rootfs_sub_dir[1000];
@@ -48,10 +52,11 @@ int newroot_mounted = 0;
 char kernel_filename[1000];
 char rootfs_filename[1000];
 char rootfs_mount_point[1000];
+char slotname[1000];
 enum RootfsTypeEnum rootfs_type;
 int stop_neutrino_needed = 1;
 
-const char ofgwrite_version[] = "4.6.3";
+const char ofgwrite_version[] = "4.6.6";
 
 struct struct_mountlist
 {
@@ -94,10 +99,12 @@ void printUsage()
 	my_printf("Options:\n");
 	my_printf("   -k --kernel           flash kernel with automatic device recognition(default)\n");
 	my_printf("   -kmtdx --kernel=mtdx  use mtdx device for kernel flashing\n");
+	my_printf("   -ksdx --kernel=sdx    use sdx device for kernel flashing\n");
 	my_printf("   -kmmcblkxpx --kernel=mmcblkxpx  use mmcblkxpx device for kernel flashing\n");
 	my_printf("   -r --rootfs           flash rootfs with automatic device recognition(default)\n");
 	my_printf("   -rmtdy --rootfs=mtdy  use mtdy device for rootfs flashing\n");
 	my_printf("   -rmmcblkxpx --rootfs=mmcblkxpx  use mmcblkxpx device for rootfs flashing\n");
+	my_printf("   -sNN --slotname=NN    user defined slot name\n");
 	my_printf("   -mx --multi=x         flash multiboot partition x (x= 1, 2, 3,...). Only supported by some boxes.\n");
 	my_printf("   -n --nowrite          show only found image and mtd partitions (no write)\n");
 	my_printf("   -f --force            force kill neutrino\n");
@@ -161,7 +168,8 @@ int find_image_files(char* p)
 			 || strcmp(entry->d_name, "oe_rootfs.bin") == 0			// DAGS boxes
 			 || strcmp(entry->d_name, "e2jffs2.img") == 0			// Spark boxes
 			 || strcmp(entry->d_name, "rootfs.tar.bz2") == 0		// solo4k
-			 || strcmp(entry->d_name, "rootfs.ubi") == 0)			// Zgemma H9
+			 || strcmp(entry->d_name, "rootfs.ubi") == 0			// Zgemma H9
+			 || strcmp(entry->d_name, "rootfs.tar.xz") == 0)		// dream
 */
 			if (strcmp(entry->d_name, "rootfs.tar.bz2") == 0
 			 || (strcmp(entry->d_name, "rootfs1.tar.bz2") == 0 && (!strcmp(vumodel, "solo4k") || !strcmp(vumodel, "duo4k") || !strcmp(vumodel, "duo4kse") || !strcmp(vumodel, "ultimo4k") || !strcmp(vumodel, "uno4k") || !strcmp(vumodel, "uno4kse") || !strcmp(vumodel, "zero4k")) && multiboot_partition == 1)	// vusolo4k/vuduo4k/vuduo4kse/vuultimo4k/vuuno4k/vuuno4kse/vuzero4k multiboot
@@ -186,20 +194,25 @@ int read_args(int argc, char *argv[])
 {
 	int option_index = 0;
 	int opt;
-	static const char *short_options = "k::r::nm:fqh";
+	char *endptr;
+	long val;
+	static const char *short_options = "k::r::ns:m:fqh";
 	static const struct option long_options[] = {
-												{"kernel" , optional_argument, NULL, 'k'},
-												{"rootfs" , optional_argument, NULL, 'r'},
-												{"nowrite", no_argument      , NULL, 'n'},
-												{"multi"  , required_argument, NULL, 'm'},
-												{"force"  , no_argument      , NULL, 'f'},
-												{"quiet"  , no_argument      , NULL, 'q'},
-												{"help"   , no_argument      , NULL, 'h'},
-												{NULL     , no_argument      , NULL,  0} };
+												{"kernel"  , optional_argument, NULL, 'k'},
+												{"rootfs"  , optional_argument, NULL, 'r'},
+												{"nowrite" , no_argument      , NULL, 'n'},
+												{"slotname", required_argument, NULL, 's'},
+												{"multi"   , required_argument, NULL, 'm'},
+												{"force"   , no_argument      , NULL, 'f'},
+												{"quiet"   , no_argument      , NULL, 'q'},
+												{"help"    , no_argument      , NULL, 'h'},
+												{NULL      , no_argument      , NULL,  0} };
 
+	strcpy(slotname, "linuxrootfs");
 	multiboot_partition = -1;
 	user_kernel = 0;
 	user_rootfs = 0;
+	user_slotname = 0;
 	rootsubdir_check = 0;
 
 	while ((opt= getopt_long(argc, argv, short_options, long_options, &option_index)) != -1)
@@ -236,22 +249,33 @@ int read_args(int argc, char *argv[])
 				break;
 			case 'm':
 				if (optarg)
-					if (strlen(optarg) == 1 && ((int)optarg[0] >= 49) && ((int)optarg[0] <= 57))
+				{
+					errno = 0;
+					val = strtol(optarg, &endptr, 10);
+					if (errno != 0 || endptr == optarg)
 					{
-						multiboot_partition = strtol(optarg, NULL, 10);
+						my_printf("Error: Wrong multiboot partition value. Only numeric values are allowed!\n");
+						show_help = 1;
+						return 0;
+					}
+					else if (val > 0)
+					{
+						multiboot_partition = val;
 						my_printf("Flashing multiboot partition %d\n", multiboot_partition);
 					}
-					else if (strlen(optarg) == 1 && ((int)optarg[0] == 48))
+					else if (val == 0)
 					{
 						my_printf("Flashing without rootSubDir check \n");
 						rootsubdir_check = 1;
 					}
-					else
-					{
-						my_printf("Error: Wrong multiboot partition value. Only values between 0 and 9 are allowed!\n");
-						show_help = 1;
-						return 0;
-					}
+				}
+				break;
+			case 's':
+				if (optarg) {
+					my_printf("Using user defined slot directory: %s\n", optarg);
+					strcpy(slotname, optarg);
+					user_slotname = 1;
+				}
 				break;
 			case 'n':
 				no_write = 1;
@@ -486,7 +510,7 @@ int read_mtd_file()
 					if (strcmp(name, "\"userdata\"") == 0) // box with subdir feature in mtd partition e.g. sfx6008
 					{
 						rootfs_flash_mode = TARBZ2_MTD;
-						sprintf(rootfs_sub_dir, "linuxrootfs%d", multiboot_partition);
+						sprintf(rootfs_sub_dir, "%s%d", slotname, multiboot_partition);
 					}
 					else
 						rootfs_flash_mode = MTD;
@@ -1141,7 +1165,7 @@ void find_store_substring(char* src, char* cmp, char* dest)
 
 	if ((pos = strstr(src, cmp)) != NULL)
 	{
-		if ((pos2 = strstr(pos, " ")) != NULL)
+		if (((pos2 = strstr(pos, " ")) != NULL) || ((pos2 = strstr(pos, "\n")) != NULL))
 		{
 			strncpy(dest, pos + strlen(cmp), pos2-pos-strlen(cmp));
 			dest[pos2-pos-strlen(cmp)] = '\0';
@@ -1170,15 +1194,18 @@ void readProcCmdline()
 
 	char line[4096];
 	char* pos;
+	memset(kexec_mode, 0, sizeof(kexec_mode));
 	memset(current_rootfs_device, 0, sizeof(current_rootfs_device));
 	memset(current_kernel_device, 0, sizeof(current_kernel_device));
 	memset(current_rootfs_sub_dir, 0, sizeof(current_rootfs_sub_dir));
 
 	if (fgets(line, 4096, f) != NULL)
 	{
+		find_store_substring(line, "kexec=", kexec_mode);
 		find_store_substring(line, "root=", current_rootfs_device);
 		find_store_substring(line, "kernel=", current_kernel_device);
 		find_store_substring(line, "rootsubdir=", current_rootfs_sub_dir);
+		my_printf("Kexec mode is: %s\n", kexec_mode);
 		my_printf("Current rootfs is: %s\n", current_rootfs_device);
 		my_printf("Current kernel is: %s\n", current_kernel_device);
 		my_printf("Current root sub dir is: %s\n", current_rootfs_sub_dir);
@@ -1197,7 +1224,7 @@ void find_kernel_rootfs_device()
 	// get kernel/rootfs from cmdline
 	readProcCmdline();
 
-	if (!found_kernel_device || !found_rootfs_device) // Both kernel and rootfs needs to be found. Otherwise ignore found devices
+	if ((!found_kernel_device || !found_rootfs_device) && strcmp(kexec_mode, "1") != 0) // Both kernel and rootfs needs to be found. Otherwise ignore found devices
 	{
 		found_kernel_device = 0;
 		found_rootfs_device = 0;
@@ -1289,7 +1316,40 @@ void find_kernel_rootfs_device()
 		my_printf("Using %s as rootfs device\n", rootfs_device);
 		if (current_rootfs_sub_dir[0] != '\0' && rootsubdir_check == 0)
 		{
-			sprintf(rootfs_sub_dir, "linuxrootfs%d", multiboot_partition);
+			sprintf(rootfs_sub_dir, "%s%d", slotname, multiboot_partition);
+		}
+	}
+	if (user_kernel)
+	{
+		found_kernel_device = 1;
+		kernel_flash_mode = TARBZ2;
+		if (strcmp(kexec_mode, "1") != 0) {
+			sprintf(kernel_device, "/dev/%s", kernel_device_arg);
+		} else {
+			sprintf(kernel_device, "/oldroot_remount/%s%d/%s", slotname, multiboot_partition, kernel_device_arg);
+		}
+		my_printf("Using %s as kernel device\n", kernel_device);
+	}
+
+	// use kexec kernel mode
+	if (!found_kernel_device && strcmp(kexec_mode, "1") == 0)
+	{
+		found_kernel_device = 1;
+		kernel_flash_mode = TARBZ2;
+		sprintf(kernel_device, "/oldroot_remount/%s%d/zImage", slotname, multiboot_partition);
+		my_printf("Using %s as kernel device\n", kernel_device);
+	}
+
+	// use kexec rootfs mode
+	if (!found_rootfs_device && strcmp(kexec_mode, "1") == 0)
+	{
+		found_rootfs_device = 1;
+		rootfs_flash_mode = TARBZ2;
+		strcpy(rootfs_device, current_rootfs_device);
+		my_printf("Using %s as rootfs device\n", rootfs_device);
+		if (current_rootfs_sub_dir[0] != '\0' && rootsubdir_check == 0)
+		{
+			sprintf(rootfs_sub_dir, "%s%d", slotname, multiboot_partition);
 		}
 	}
 
@@ -1355,7 +1415,7 @@ int check_device_size()
 	unsigned long long devsize = 0;
 	int fd = 0;
 	// check kernel
-	if (found_kernel_device && kernel_filename[0] != '\0' && kernel_flash_mode == TARBZ2)
+	if (found_kernel_device && kernel_filename[0] != '\0' && kernel_flash_mode == TARBZ2 && (strcmp(kexec_mode, "1") != 0))
 	{
 		fd = open(kernel_device, O_RDONLY);
 		if (fd <= 0)
@@ -1638,6 +1698,29 @@ int main(int argc, char *argv[])
 				close_framebuffer();
 				return EXIT_FAILURE;
 			}
+		}
+
+		if (!no_write) {
+			char tmp[1016];
+			sprintf(tmp, "/oldroot_remount/%s", rootfs_sub_dir);
+			my_printf("Creating directory %s recursively\n", rootfs_sub_dir);
+			bb_make_directory(tmp, -1, FILEUTILS_RECUR);
+		}
+
+		// Flash rootfs
+		if (!rootfs_flash(rootfs_device, rootfs_filename))
+		{
+			my_printf("Error flashing rootfs! System won't boot. Please flash backup! System will reboot in 60 seconds\n");
+			set_error_text1("Error flashing rootfs. System won't boot!");
+			set_error_text2("Please flash backup! Rebooting in 60 sec");
+			if (stop_e2_needed)
+			{
+				sleep(60);
+				reboot(LINUX_REBOOT_CMD_RESTART);
+			}
+			sleep(3);
+			close_framebuffer();
+			return EXIT_FAILURE;
 		}
 
 		//Flash kernel
