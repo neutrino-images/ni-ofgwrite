@@ -146,7 +146,10 @@ int flash_unpack_rootfs(char* filename, int quiet, int no_write)
 		my_printf("Error extracting rootfs\n");
 		return 0;
 	}
+	// sync filesystem double because of sdcard
 	sync();
+	sync();
+	sleep(1);
 
 	//NI
 	char backup_file[64] = "";
