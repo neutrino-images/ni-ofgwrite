@@ -2078,21 +2078,6 @@ int main(int argc, char *argv[])
 			my_printf("Successfully flashed kernel!\n");
 		}
 
-		// Flash rootfs
-		if (!rootfs_flash(rootfs_device, rootfs_filename))
-		{
-			my_printf("Error flashing rootfs! System won't boot. Please flash backup! System will reboot in 60 seconds\n");
-			set_error_text1("Error flashing rootfs. System won't boot!");
-			set_error_text2("Please flash backup! Rebooting in 60 sec");
-			if (stop_neutrino_needed)
-			{
-				sleep(60);
-				reboot(LINUX_REBOOT_CMD_RESTART);
-			}
-			sleep(3);
-			close_framebuffer();
-			return EXIT_FAILURE;
-		}
 /* //NI
 		//Android boot kernel.img Dreambox one/two
 		if (android)
@@ -2169,7 +2154,7 @@ int main(int argc, char *argv[])
 
 		sync();
 		sleep(1);
-		my_printf("Successfully flashed rootfs!\n"); //NI
+
 		if (!stop_neutrino_needed)
 		{
 			ret = umount2("/oldroot_remount/", MNT_DETACH);
