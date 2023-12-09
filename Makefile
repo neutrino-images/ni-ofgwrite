@@ -71,7 +71,8 @@ OBJ_BUSYBOX = $(SRC_BUSYBOX:.c=.o)
 
 OUT = ofgwrite_bin
 
-LDFLAGS= -Llib -lmtd -lssl -lcrypto -latomic -static
+LDFLAGS ?=
+LDFLAGS += -Llib -lmtd -lssl -lcrypto -latomic -static
 
 LIBSRC = ./lib/libmtd.c ./lib/libmtd_legacy.c ./lib/libcrc32.c ./lib/libfec.c
 
