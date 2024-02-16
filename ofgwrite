@@ -14,7 +14,7 @@ if [ -e /tmp/backup_flash.tar.gz ]; then
 fi
 
 echo "Copying ofgwrite_bin to /newroot"
-cp $prefix/bin/ofgwrite_bin /newroot/
+cp -p $prefix/bin/ofgwrite_bin /newroot/
 
 echo "Calling /newroot/ofgwrite_bin $@"
 /newroot/ofgwrite_bin "$@"
