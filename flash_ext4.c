@@ -166,7 +166,7 @@ int flash_unpack_rootfs(char* filename, int quiet, int no_write)
 		mkdir(path, 777); //needed?
 		strcat(path, "/backup_flash.tar.gz");
 		my_printf("Copy path: %s\n", path);
-		ret = copy_file(backup_file, path);
+		ret = ni_copy_file(backup_file, path);
 		if (ret != 0)
 			my_printf("Error copying backup_flash.tar.gz\n");
 	}
@@ -177,7 +177,7 @@ int flash_unpack_rootfs(char* filename, int quiet, int no_write)
 }
 
 #define BUF_SIZE 1024
-copy_file(char *from, char *to)
+ni_copy_file(char *from, char *to)
 {
 	int inputFd, outputFd, openFlags;
 	mode_t filePerms;

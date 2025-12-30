@@ -1603,14 +1603,14 @@ void readProcCmdline()
 			my_printf("Detected slot number from currentslotcode: %d\n", currentslotcode);
 			my_printf("Current multiboot partition: %d\n", multiboot_partition);
 			if (user_currentslotcode == 0) {
-				force_e2_stop = 1;
-				my_printf("Force E2 stop: ENABLED (default currentslot)\n");
+				force_neutrino_stop = 1;
+				my_printf("Force Neutrino stop: ENABLED (default currentslot)\n");
 			} else if (currentslotcode == multiboot_partition) {
-				force_e2_stop = 1;
-				my_printf("Force E2 stop: ENABLED\n");
+				force_neutrino_stop = 1;
+				my_printf("Force Neutrino stop: ENABLED\n");
 			} else {
-				force_e2_stop = 0;
-				my_printf("Force E2 stop: DISABLED\n");
+				force_neutrino_stop = 0;
+				my_printf("Force Neutrino stop: DISABLED\n");
 			}
 		}
 
