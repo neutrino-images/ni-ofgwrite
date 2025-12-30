@@ -66,12 +66,15 @@ char rootfs_device_arg[1000];
 char kernel_device[1000];
 char rootfs_device[1000];
 char rootfs_sub_dir[1000];
+const char * rootfs_fs_type;
 
 int found_kernel_device;
 int found_rootfs_device;
 int user_kernel;
 int user_rootfs;
 int user_slotname;
+int user_currentslotcode;
+int currentslotcode;
 int rootsubdir_check;
 int multiboot_partition;
 char kexec_mode[1000];
@@ -79,10 +82,13 @@ char current_rootfs_device[1000];
 char current_kernel_device[1000];
 char current_rootfs_sub_dir[1000];
 char ubi_fs_name[1000];
+char ubi_loop_device[1000];
+int loop_mtd_device = 99999;
 char vumodel[63];
 
 enum FlashModeTypeEnum kernel_flash_mode;
 enum FlashModeTypeEnum rootfs_flash_mode;
+enum ImageTypeEnum image_type;
 
 int android = 0;
 int dreamcard = 1;
@@ -95,13 +101,16 @@ int show_help     = 0;
 int newroot_mounted = 0;
 char kernel_filename[1000];
 char rootfs_filename[1000];
+char nfi_filename[1000];
+char nfi_path[1000];
 char rootfs_mount_point[1000];
 char slotname[1000];
 char *boxname = NULL;
 enum RootfsTypeEnum rootfs_type;
 int stop_neutrino_needed = 1;
+int chkroot_mode = 0;
 
-const char ofgwrite_version[] = "4.6.8";
+const char ofgwrite_version[] = "4.8.0";
 
 struct struct_mountlist
 {
@@ -369,20 +378,21 @@ void printUsage()
 {
 	my_printf("Usage: ofgwrite <parameter> <image_directory>\n");
 	my_printf("Options:\n");
-	//NI my_printf("   -a --android          create Android boot image header\n");
-	my_printf("   -k --kernel           flash kernel with automatic device recognition(default)\n");
-	my_printf("   -kmtdx --kernel=mtdx  use mtdx device for kernel flashing\n");
-	my_printf("   -ksdx --kernel=sdx    use sdx device for kernel flashing\n");
+	//NI my_printf("   -a --android           create Android boot image header\n");
+	my_printf("   -cNN --currentslot=NN  user defined current slot name\n");
+	my_printf("   -k --kernel            flash kernel with automatic device recognition(default)\n");
+	my_printf("   -kmtdx --kernel=mtdx   use mtdx device for kernel flashing\n");
+	my_printf("   -ksdx --kernel=sdx     use sdx device for kernel flashing\n");
 	my_printf("   -kmmcblkxpx --kernel=mmcblkxpx  use mmcblkxpx device for kernel flashing\n");
-	my_printf("   -r --rootfs           flash rootfs with automatic device recognition(default)\n");
-	my_printf("   -rmtdy --rootfs=mtdy  use mtdy device for rootfs flashing\n");
+	my_printf("   -r --rootfs            flash rootfs with automatic device recognition(default)\n");
+	my_printf("   -rmtdy --rootfs=mtdy   use mtdy device for rootfs flashing\n");
 	my_printf("   -rmmcblkxpx --rootfs=mmcblkxpx  use mmcblkxpx device for rootfs flashing\n");
-	my_printf("   -sNN --slotname=NN    user defined slot name\n");
-	my_printf("   -mx --multi=x         flash multiboot partition x (x= 1, 2, 3,...). Only supported by some boxes.\n");
-	my_printf("   -n --nowrite          show only found image and mtd partitions (no write)\n");
-	my_printf("   -f --force            force kill neutrino\n");
-	my_printf("   -q --quiet            show less output\n");
-	my_printf("   -h --help             show help\n");
+	my_printf("   -sNN --slotname=NN     user defined slot name\n");
+	my_printf("   -mx --multi=x          flash multiboot partition x (x= 1, 2, 3,...). Only supported by some boxes.\n");
+	my_printf("   -n --nowrite           show only found image and mtd partitions (no write)\n");
+	my_printf("   -f --force             force kill neutrino\n");
+	my_printf("   -q --quiet             show less output\n");
+	my_printf("   -h --help              show help\n");
 }
 
 char* ReadProcEntry(char *filename)
@@ -432,6 +442,8 @@ int find_image_files(char* p)
 	my_printf("Searching image files in %s resolved to %s\n", p, path);
 	kernel_filename[0] = '\0';
 	rootfs_filename[0] = '\0';
+	nfi_filename[0] = '\0';
+	nfi_path[0] = '\0';
 
 	// add / to the end of the path
 	if (path[strlen(path)-1] != '/')
@@ -489,6 +501,27 @@ int find_image_files(char* p)
 				strcpy(&rootfs_filename[strlen(path)], entry->d_name);
 				stat(rootfs_filename, &rootfs_file_stat);
 				my_printf("Found rootfs file: %s\n", rootfs_filename);
+				if (strstr(entry->d_name, ".tar.") != NULL)
+					image_type = TAR_BASED;
+				else
+					image_type = UBI;
+			}
+			if (strcmp(&entry->d_name[strlen(entry->d_name)-4], ".nfi") == 0) // dream nfi
+			{
+				strcpy(nfi_filename, path);
+				strcat(nfi_filename, entry->d_name);
+				stat(nfi_filename, &rootfs_file_stat);
+				my_printf("Found nfi file: %s\n", nfi_filename);
+				strcpy(nfi_path, path);
+				image_type = UBI;
+			}
+			if (strcmp(&entry->d_name[strlen(entry->d_name)-7], ".tar.xz") == 0) // dream dm520
+			{
+				strcpy(rootfs_filename, path);
+				strcat(rootfs_filename, entry->d_name);
+				stat(rootfs_filename, &rootfs_file_stat);
+				my_printf("Found tar.xz rootfs file: %s\n", rootfs_filename);
+				image_type = TAR_UBI;
 			}
 		}
 	} while (entry);
@@ -504,24 +537,27 @@ int read_args(int argc, char *argv[])
 	int opt;
 	char *endptr;
 	long val;
-	static const char *short_options = "ak::r::ns:m:fqh";
+	static const char *short_options = "ac::k::r::ns:m:fqh";
 	static const struct option long_options[] = {
-												{"android"  , no_argument, NULL, 'a'},
-												{"kernel"    , optional_argument, NULL, 'k'},
-												{"rootfs"    , optional_argument, NULL, 'r'},
-												{"nowrite"   , no_argument      , NULL, 'n'},
-												{"slotname"  , required_argument, NULL, 's'},
-												{"multi"     , required_argument, NULL, 'm'},
-												{"force"     , no_argument      , NULL, 'f'},
-												{"quiet"     , no_argument      , NULL, 'q'},
-												{"help"      , no_argument      , NULL, 'h'},
-												{NULL        , no_argument      , NULL,  0} };
+												{"android"      , no_argument, NULL, 'a'},
+												{"currentslot"  , optional_argument, NULL, 'c'},
+												{"kernel"       , optional_argument, NULL, 'k'},
+												{"rootfs"       , optional_argument, NULL, 'r'},
+												{"nowrite"      , no_argument      , NULL, 'n'},
+												{"slotname"     , required_argument, NULL, 's'},
+												{"multi"        , required_argument, NULL, 'm'},
+												{"force"        , no_argument      , NULL, 'f'},
+												{"quiet"        , no_argument      , NULL, 'q'},
+												{"help"         , no_argument      , NULL, 'h'},
+												{NULL           , no_argument      , NULL,  0} };
 
 	strcpy(slotname, "linuxrootfs");
+	currentslotcode = 1;
 	multiboot_partition = -1;
 	user_kernel = 0;
 	user_rootfs = 0;
 	user_slotname = 0;
+	user_currentslotcode = 0;
 	android = 0;
 	rootsubdir_check = 0;
 
@@ -533,6 +569,13 @@ int read_args(int argc, char *argv[])
 				boxname = ReadProcEntry("/proc/stb/info/model");
 				my_printf("Boxname detectet: %s\n", boxname);
 				android = 1;
+				break;
+			case 'c':
+				if (optarg) {
+					my_printf("Using user defined current slot code: %s\n", optarg);
+					currentslotcode = atoi(optarg);
+					user_currentslotcode = 1;
+				}
 				break;
 			case 'k':
 				flash_kernel = 1;
@@ -862,9 +905,9 @@ int kernel_flash(char* device, char* filename)
 		return flash_ubi_jffs2_kernel(device, filename, quiet, no_write);
 }
 
-int rootfs_flash(char* device, char* filename)
+int rootfs_flash(char* device, char* filename, char* nfi_filename)
 {
-	if (rootfs_flash_mode == TARBZ2 || rootfs_flash_mode == TARBZ2_MTD)
+	if (rootfs_flash_mode == TARBZ2 || rootfs_flash_mode == TARBZ2_MTD || rootfs_flash_mode == TARXZ_UBI)
 	{
 		my_printf("Flash rootfs unpack\n");
 		return flash_unpack_rootfs(filename, quiet, no_write);
@@ -874,6 +917,11 @@ int rootfs_flash(char* device, char* filename)
 		if (rootfs_type == EXT4) // MTD rootfs with unknown format -> expect ubifs as only ubifs boxes support this
 			rootfs_type = UBIFS;
 		return flash_ubi_jffs2_rootfs(device, filename, rootfs_type, quiet, no_write);
+	}
+	else if (rootfs_flash_mode == UBI_LOOP_SUBDIR)
+	{
+		my_printf("Flash rootfs ubi loop subdir\n");
+		return flash_ubi_loop_subdir(filename, nfi_filename, quiet, no_write);
 	}
 }
 
@@ -894,7 +942,7 @@ int readProcMounts()
 	rootfs_type = UNKNOWN;
 	rootfs_mount_point[0] = '\0';
 
-	if (rootfs_filename[0] != '\0') // rootfs image file found
+	if (rootfs_filename[0] != '\0' || nfi_filename != '\0') // rootfs image file found
 	{
 		devno_of_name = rootfs_file_stat.st_dev;
 		block_dev = 0;
@@ -931,10 +979,18 @@ int readProcMounts()
 			rootfs_type = JFFS2;
 		}
 		else if (strcmp(mountEntry->mnt_dir, "/") == 0
+			  && strcmp(mountEntry->mnt_type, "ext3") == 0)
+		{
+			my_printf("Found EXT3 rootfs\n");
+			rootfs_type = EXT3;
+			rootfs_fs_type = "ext3";
+		}
+		else if (strcmp(mountEntry->mnt_dir, "/") == 0
 			  && strcmp(mountEntry->mnt_type, "ext4") == 0)
 		{
 			my_printf("Found EXT4 rootfs\n");
 			rootfs_type = EXT4;
+			rootfs_fs_type = "ext4";
 		}
 		// check newroot
 		else if (strcmp(mountEntry->mnt_dir, "/newroot") == 0
@@ -945,11 +1001,13 @@ int readProcMounts()
 		}
 		else
 		{
-			if (rootfs_filename[0] != '\0')
+			if (rootfs_filename[0] != '\0' || nfi_filename != '\0')
 			{
 				// find mountpoint on which the image files are located
 				if (strcmp(rootfs_filename, mountEntry->mnt_dir) == 0
 				 || strcmp(rootfs_filename, mountEntry->mnt_fsname) == 0
+				 || strcmp(nfi_filename, mountEntry->mnt_dir) == 0
+				 || strcmp(nfi_filename, mountEntry->mnt_fsname) == 0
 				 || (stat(mountEntry->mnt_fsname, &dummy_stat) == 0 && dummy_stat.st_rdev == devno_of_name)
 				 || (stat(mountEntry->mnt_dir, &dummy_stat) == 0 && dummy_stat.st_dev == devno_of_name))
 				{
@@ -1418,9 +1476,11 @@ int umount_rootfs(int steps)
 		my_printf("umount not successful\n");
 
 	// mount oldroot to other mountpoint, because otherwise all data in not moved filesystems under /oldroot will be deleted
-	if (rootfs_flash_mode == TARBZ2 || rootfs_flash_mode == TARBZ2_MTD)
+	if (rootfs_flash_mode == TARBZ2 || rootfs_flash_mode == TARBZ2_MTD || rootfs_flash_mode == UBI_LOOP_SUBDIR || rootfs_flash_mode == TARXZ_UBI)
 	{
 		if (rootfs_flash_mode == TARBZ2)
+			ret = mount(rootfs_device, "/oldroot_remount/", rootfs_fs_type, 0, NULL);
+		else if (rootfs_flash_mode == UBI_LOOP_SUBDIR || rootfs_flash_mode == TARXZ_UBI)
 			ret = mount(rootfs_device, "/oldroot_remount/", "ext4", 0, NULL);
 		else
 			ret = mount(ubi_fs_name, "/oldroot_remount/", "ubifs", 0, NULL);
@@ -1474,14 +1534,6 @@ void ext4_kernel_dev_found(const char* dev, int partition_number)
 
 void ext4_rootfs_dev_found(const char* dev, int partition_number)
 {
-	// Check whether rootfs is on the same device as current used rootfs
-	sprintf(rootfs_device, "%sp", dev);
-	if (strncmp(rootfs_device, current_rootfs_device, strlen(rootfs_device)) != 0)
-	{
-		my_printf("Rootfs(%s) is on different device than current rootfs(%s). Maybe wrong device selected. -> Aborting\n", dev, current_rootfs_device);
-		return;
-	}
-
 	found_rootfs_device = 1;
 	rootfs_flash_mode = TARBZ2;
 	sprintf(rootfs_device, "%sp%d", dev, partition_number);
@@ -1535,7 +1587,35 @@ void readProcCmdline()
 		find_store_substring(line, "root=", current_rootfs_device);
 		find_store_substring(line, "kernel=", current_kernel_device);
 		find_store_substring(line, "rootsubdir=", current_rootfs_sub_dir);
+
+		boxname = ReadProcEntry("/proc/stb/info/model");
+		if ((strstr(line, "others") != NULL ||
+			strstr(line, "other2") != NULL ||
+			strstr(boxname, "dm820") != NULL || 
+			strstr(boxname, "dm7080") != NULL || 
+			strstr(boxname, "dm900") != NULL || 
+			strstr(boxname, "dm920") != NULL ||
+			user_currentslotcode == 1)
+			&& multiboot_partition != -1)  
+		{
+			snprintf(current_rootfs_sub_dir, sizeof(current_rootfs_sub_dir), "%s%d", slotname, currentslotcode);
+			chkroot_mode = 1;
+			my_printf("Detected slot number from currentslotcode: %d\n", currentslotcode);
+			my_printf("Current multiboot partition: %d\n", multiboot_partition);
+			if (user_currentslotcode == 0) {
+				force_e2_stop = 1;
+				my_printf("Force E2 stop: ENABLED (default currentslot)\n");
+			} else if (currentslotcode == multiboot_partition) {
+				force_e2_stop = 1;
+				my_printf("Force E2 stop: ENABLED\n");
+			} else {
+				force_e2_stop = 0;
+				my_printf("Force E2 stop: DISABLED\n");
+			}
+		}
+
 		my_printf("Kexec mode is: %s\n", kexec_mode);
+		my_printf("Chkroot mode is: %d\n", chkroot_mode);
 		my_printf("Current rootfs is: %s\n", current_rootfs_device);
 		my_printf("Current kernel is: %s\n", current_kernel_device);
 		my_printf("Current root sub dir is: %s\n", current_rootfs_sub_dir);
@@ -1659,6 +1739,20 @@ void find_kernel_rootfs_device()
 			sprintf(kernel_device, "/oldroot_remount/%s%d/%s", slotname, multiboot_partition, kernel_device_arg);
 		}
 		my_printf("Using %s as kernel device\n", kernel_device);
+	}
+
+	// use chkroot rootfs mode
+	if (chkroot_mode == 1)
+	{
+		if (image_type == TAR_BASED) {
+			rootfs_flash_mode = TARBZ2;
+		} else if (image_type == TAR_UBI) {
+			rootfs_flash_mode = TARXZ_UBI;
+		} else {
+			rootfs_flash_mode = UBI_LOOP_SUBDIR;
+		}
+		my_printf("Using %s as rootfs device\n", rootfs_device);
+		sprintf(rootfs_sub_dir, "%s%d", slotname, multiboot_partition);
 	}
 
 	// use kexec kernel mode
@@ -1867,7 +1961,7 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	if (flash_rootfs && (!found_rootfs_device || rootfs_filename[0] == '\0' || rootfs_type == UNKNOWN))
+	if (flash_rootfs && (!found_rootfs_device || (rootfs_filename[0] == '\0' && nfi_filename[0] == '\0') || rootfs_type == UNKNOWN))
 	{
 		my_printf("Error: Cannot flash rootfs");
 		if (!found_rootfs_device)
@@ -1994,7 +2088,7 @@ int main(int argc, char *argv[])
 			}
 		}
 		// if not running rootfs is flashed then we need to mount it before start flashing
-		if (!no_write && !stop_neutrino_needed && (rootfs_flash_mode == TARBZ2 || rootfs_flash_mode == TARBZ2_MTD))
+		if (!no_write && !stop_neutrino_needed && (rootfs_flash_mode == TARBZ2 || rootfs_flash_mode == TARBZ2_MTD || rootfs_flash_mode == UBI_LOOP_SUBDIR || rootfs_flash_mode == TARXZ_UBI))
 		{
 			set_step("Mount rootfs");
 			my_printf("Mount rootfs\n");
@@ -2002,11 +2096,13 @@ int main(int argc, char *argv[])
 			// mount rootfs device
 			if (rootfs_flash_mode == TARBZ2_MTD) // box with mtd subdir feature e.g. sfx6008
 				ret = mount(ubi_fs_name, "/oldroot_remount/", "ubifs", 0, NULL);
-			else
+			else if (rootfs_flash_mode == UBI_LOOP_SUBDIR || rootfs_flash_mode == TARXZ_UBI) // ubi box with subdir feature on external device (USB, SATA,...)
 				ret = mount(rootfs_device, "/oldroot_remount/", "ext4", 0, NULL);
+			else
+				ret = mount(rootfs_device, "/oldroot_remount/", rootfs_fs_type, 0, NULL);
 			if (!ret)
 				my_printf("Mount to /oldroot_remount/ successful\n");
-			else if (errno == EINVAL && rootfs_flash_mode != TARBZ2_MTD)
+			else if (errno == EINVAL && rootfs_flash_mode != TARBZ2_MTD && rootfs_flash_mode != UBI_LOOP_SUBDIR && rootfs_flash_mode != TARXZ_UBI)
 			{
 				// most likely partition is not formatted -> format it
 				char mkfs_cmd[100];
@@ -2038,7 +2134,7 @@ int main(int argc, char *argv[])
 		}
 
 		// Flash rootfs
-		if (!rootfs_flash(rootfs_device, rootfs_filename))
+		if (!rootfs_flash(rootfs_device, rootfs_filename, nfi_filename))
 		{
 			my_printf("Error flashing rootfs! System won't boot. Please flash backup! System will reboot in 60 seconds\n");
 			set_error_text1("Error flashing rootfs. System won't boot!");
