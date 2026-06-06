@@ -2253,7 +2253,9 @@ int main(int argc, char *argv[])
 
 		if (!stop_neutrino_needed)
 		{
-			ret = umount2("/oldroot_remount/", MNT_DETACH);
+			ret = umount("/oldroot_remount/");	// blocking umount to flush dirty pages before reboot
+			if (ret)
+				umount2("/oldroot_remount/", MNT_DETACH);	// fallback if mountpoint is busy
 			ret = rmdir("/oldroot_remount/");
 			ret = umount2("/newroot/", MNT_DETACH);
 			ret = rmdir("/newroot/");
