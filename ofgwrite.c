@@ -110,7 +110,7 @@ enum RootfsTypeEnum rootfs_type;
 int stop_neutrino_needed = 1;
 int chkroot_mode = 0;
 
-const char ofgwrite_version[] = "4.8.0";
+const char ofgwrite_version[] = "4.8.1";
 
 struct struct_mountlist
 {
@@ -1191,45 +1191,45 @@ int umount_rootfs(int steps)
 	// the start script creates /newroot dir and mount tmpfs on it
 	// create directories
 	ret += chdir("/newroot");
-	ret += mkdir("/newroot/bin", 777);
-	ret += mkdir("/newroot/boot", 777); //NI
-	ret += mkdir("/newroot/dev", 777);
-	ret += mkdir("/newroot/etc", 777);
-	ret += mkdir("/newroot/dev/pts", 777);
-	ret += mkdir("/newroot/lib", 777);
-	ret += mkdir("/newroot/media", 777);
-	ret += mkdir("/newroot/mnt", 777); //NI
-	ret += mkdir("/newroot/oldroot", 777);
-	ret += mkdir("/newroot/oldroot_remount", 777);
-	ret += mkdir("/newroot/proc", 777);
-	ret += mkdir("/newroot/run", 777);
-	ret += mkdir("/newroot/sbin", 777);
-	ret += mkdir("/newroot/srv", 777); //NI
-	ret += mkdir("/newroot/sys", 777);
-	ret += mkdir("/newroot/tmp", 777); //NI
+	ret += mkdir("/newroot/bin", 0777);
+	ret += mkdir("/newroot/boot", 0777); //NI
+	ret += mkdir("/newroot/dev", 0777);
+	ret += mkdir("/newroot/etc", 0777);
+	ret += mkdir("/newroot/dev/pts", 0777);
+	ret += mkdir("/newroot/lib", 0777);
+	ret += mkdir("/newroot/media", 0777);
+	ret += mkdir("/newroot/mnt", 0777); //NI
+	ret += mkdir("/newroot/oldroot", 0777);
+	ret += mkdir("/newroot/oldroot_remount", 0777);
+	ret += mkdir("/newroot/proc", 0777);
+	ret += mkdir("/newroot/run", 0777);
+	ret += mkdir("/newroot/sbin", 0777);
+	ret += mkdir("/newroot/srv", 0777); //NI
+	ret += mkdir("/newroot/sys", 0777);
+	ret += mkdir("/newroot/tmp", 0777); //NI
 /* //NI
-	ret += mkdir("/newroot/usr", 777);
-	ret += mkdir("/newroot/usr/lib", 777);
-	ret += mkdir("/newroot/usr/lib/autofs", 777);
-	ret += mkdir("/newroot/usr/sbin", 777);
+	ret += mkdir("/newroot/usr", 0777);
+	ret += mkdir("/newroot/usr/lib", 0777);
+	ret += mkdir("/newroot/usr/lib/autofs", 0777);
+	ret += mkdir("/newroot/usr/sbin", 0777);
 */
-	ret += mkdir("/newroot/var", 777);
-	ret += mkdir("/newroot/var/run", 777); //NI
-	ret += mkdir("/newroot/var/lib", 777); //NI
-	ret += mkdir("/newroot/var/lib/nfs", 777); //NI
-	ret += mkdir("/newroot/var/samba", 777); //NI
+	ret += mkdir("/newroot/var", 0777);
+	ret += mkdir("/newroot/var/run", 0777); //NI
+	ret += mkdir("/newroot/var/lib", 0777); //NI
+	ret += mkdir("/newroot/var/lib/nfs", 0777); //NI
+	ret += mkdir("/newroot/var/samba", 0777); //NI
 /* //NI
-	ret += mkdir("/newroot/var/volatile", 777);
+	ret += mkdir("/newroot/var/volatile", 0777);
 
 	if (multilib)
 	{
-		ret += mkdir("/newroot/lib64", 777);
-		ret += mkdir("/newroot/usr/lib64", 777);
-		ret += mkdir("/newroot/usr/lib64/autofs", 777);
+		ret += mkdir("/newroot/lib64", 0777);
+		ret += mkdir("/newroot/usr/lib64", 0777);
+		ret += mkdir("/newroot/usr/lib64/autofs", 0777);
 	}
 	if (android)
 	{
-		ret += mkdir("/newroot/dreamcard", 777);
+		ret += mkdir("/newroot/dreamcard", 0777);
 	}
 */
 
@@ -2092,7 +2092,7 @@ int main(int argc, char *argv[])
 		{
 			set_step("Mount rootfs");
 			my_printf("Mount rootfs\n");
-			mkdir("/oldroot_remount", 777);
+			mkdir("/oldroot_remount", 0777);
 			// mount rootfs device
 			if (rootfs_flash_mode == TARBZ2_MTD) // box with mtd subdir feature e.g. sfx6008
 				ret = mount(ubi_fs_name, "/oldroot_remount/", "ubifs", 0, NULL);
@@ -2191,7 +2191,7 @@ int main(int argc, char *argv[])
 			if (strcmp(device_root, "/dev/mmcblk1") == 0)
 			{
 				my_printf("Mount dreamcard\n");
-				mkdir(dreamcard_mount, 777);
+				mkdir(dreamcard_mount, 0777);
 
 				FILE *device = fopen("/dev/mmcblk1p1", "rb");
 				if (device == NULL) {
@@ -2211,8 +2211,8 @@ int main(int argc, char *argv[])
 					dreamcard = 0;
 				}
 
-				if (strcmp(label, "DREAMCARD\n") != 0) {
-					my_printf("Info: The device label does not match 'dreamcard'\n");
+				if (strcmp(label, "DREAMCARD\n") != 0 && strcmp(label, "DREAMBOOT\n") != 0) {
+					my_printf("Info: The device label does not match 'dreamcard' or 'dreamboot'\n");
 					dreamcard = 0;
 				}
 				if (dreamcard) {
@@ -2224,15 +2224,21 @@ int main(int argc, char *argv[])
 						rmdir(dreamcard_mount);
 						return EXIT_FAILURE;
 					}
-					size_t length = strlen(rootfs_device);
-					int kernelnr = (length > 0) ? rootfs_device[length - 1] - '0' : -1;
-					if (kernelnr < 0 || kernelnr > 9) {
-						my_printf("Error: Invalid kernel number\n");
-						rmdir(dreamcard_mount);
-						return EXIT_FAILURE;
-					}
 					char filename[50];
-					snprintf(filename, sizeof(filename), "/dreamcard/kernel%d.img", kernelnr);
+					//SD auto-boot variant: u-boot.bin + kernel.img present -> write kernel.img
+					if (access("/dreamcard/u-boot.bin", F_OK) == 0
+					 && access("/dreamcard/kernel.img", F_OK) == 0) {
+						snprintf(filename, sizeof(filename), "/dreamcard/kernel.img");
+					} else {
+						size_t length = strlen(rootfs_device);
+						int kernelnr = (length > 0) ? rootfs_device[length - 1] - '0' : -1;
+						if (kernelnr < 0 || kernelnr > 9) {
+							my_printf("Error: Invalid kernel number\n");
+							rmdir(dreamcard_mount);
+							return EXIT_FAILURE;
+						}
+						snprintf(filename, sizeof(filename), "/dreamcard/kernel%d.img", kernelnr);
+					}
 					my_printf("start generate %s image on %s\n", filename, dreamcard_device);
 					generate_boot_image(filename);
 					sync();
