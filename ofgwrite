@@ -3,10 +3,12 @@
 prefix=
 
 echo "Creating /newroot"
-mkdir -p /newroot
+mkdir -p /newroot || exit 1
 
 echo "Mounting /newroot to tempfs"
-mount -t tmpfs tmpfs /newroot
+if ! awk '$2 == "/newroot" && $3 == "tmpfs" { found=1 } END { exit found ? 0 : 1 }' /proc/mounts; then
+	mount -t tmpfs tmpfs /newroot || exit 1
+fi
 
 if [ -e /tmp/backup_flash.tar.gz ]; then
 	echo "Moving /tmp/backup_flash.tar.gz to /newroot"
@@ -14,7 +16,7 @@ if [ -e /tmp/backup_flash.tar.gz ]; then
 fi
 
 echo "Copying ofgwrite_bin to /newroot"
-cp -p $prefix/bin/ofgwrite_bin /newroot/
+cp -p $prefix/bin/ofgwrite_bin /newroot/ || exit 1
 
 echo "Calling /newroot/ofgwrite_bin $@"
-/newroot/ofgwrite_bin "$@"
+exec /newroot/ofgwrite_bin "$@"

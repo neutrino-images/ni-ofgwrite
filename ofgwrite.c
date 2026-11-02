@@ -1,4 +1,5 @@
 #include "ofgwrite.h"
+#include "dream_kernel.h"
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -110,7 +111,7 @@ enum RootfsTypeEnum rootfs_type;
 int stop_neutrino_needed = 1;
 int chkroot_mode = 0;
 
-const char ofgwrite_version[] = "4.8.1";
+const char ofgwrite_version[] = "4.8.2";
 
 struct struct_mountlist
 {
@@ -393,39 +394,22 @@ void printUsage()
 	my_printf("   -f --force             force kill neutrino\n");
 	my_printf("   -q --quiet             show less output\n");
 	my_printf("   -h --help              show help\n");
+	my_printf("   --features             list supported extensions without probing devices\n");
+	my_printf("   --backup-dream-kernel-a DIR  export shared DM820/DM7080 kernel A into a new directory (read-only)\n");
 }
 
 char* ReadProcEntry(char *filename)
 {
-	FILE *boxtype_file = fopen(filename,"r");
-	char boxtype_name[20];
-	char *real_boxtype_name = NULL;
-	char c;
-	int i = 0;
-
-	if(boxtype_file)
-	{
-		while ((c = fgetc(boxtype_file)) != EOF && i < sizeof(boxtype_name) - 2)
-		{
-			if (c == '\n')
-			{
-				i--;
-				break;
-			}
-			boxtype_name[i] = c;
-			i++;
-		}
-		boxtype_name[i+1] = '\0';
-		real_boxtype_name = malloc(strlen(boxtype_name) + 1);
-		if (real_boxtype_name)
-			strcpy(real_boxtype_name, boxtype_name);
-
-		fclose(boxtype_file);
+	FILE *file = fopen(filename, "r");
+	char name[64] = "";
+	if (file) {
+		if (!fgets(name, sizeof(name), file))
+			name[0] = '\0';
+		fclose(file);
 	}
-	else
-		my_printf("Can not open this proc entry!\n");
-
-	return real_boxtype_name;
+	name[strcspn(name, "\r\n")] = '\0';
+	/* Callers also handle a missing proc entry as a non-matching model. */
+	return strdup(name);
 }
 
 int find_image_files(char* p)
@@ -506,7 +490,7 @@ int find_image_files(char* p)
 				else
 					image_type = UBI;
 			}
-			if (strcmp(&entry->d_name[strlen(entry->d_name)-4], ".nfi") == 0) // dream nfi
+			if (strlen(entry->d_name) >= 4 && strcmp(&entry->d_name[strlen(entry->d_name)-4], ".nfi") == 0) // dream nfi
 			{
 				strcpy(nfi_filename, path);
 				strcat(nfi_filename, entry->d_name);
@@ -515,7 +499,7 @@ int find_image_files(char* p)
 				strcpy(nfi_path, path);
 				image_type = UBI;
 			}
-			if (strcmp(&entry->d_name[strlen(entry->d_name)-7], ".tar.xz") == 0) // dream dm520
+			if (strlen(entry->d_name) >= 7 && strcmp(&entry->d_name[strlen(entry->d_name)-7], ".tar.xz") == 0) // dream dm520
 			{
 				strcpy(rootfs_filename, path);
 				strcat(rootfs_filename, entry->d_name);
@@ -899,10 +883,13 @@ int read_mtd_file()
 
 int kernel_flash(char* device, char* filename)
 {
-	if (kernel_flash_mode == TARBZ2)
+	if (kernel_flash_mode == DREAM_KERNEL_A)
+		return no_write ? 1 : dream_kernel_write();
+	else if (kernel_flash_mode == TARBZ2)
 		return flash_ext4_kernel(device, filename, kernel_file_stat.st_size, quiet, no_write);
 	else if (kernel_flash_mode == MTD)
 		return flash_ubi_jffs2_kernel(device, filename, quiet, no_write);
+	return 0;
 }
 
 int rootfs_flash(char* device, char* filename, char* nfi_filename)
@@ -1440,6 +1427,7 @@ int umount_rootfs(int steps)
 		my_printf("umounting: %s\n", mountlist->dir);
 		strcpy(oldroot_path, "/oldroot");
 		strcat(oldroot_path, mountlist->dir);
+		sleep(1);
 		umount2(oldroot_path, MNT_DETACH);
 		free(mountlist->dir);
 		mountlist = mountlist->next;
@@ -1528,7 +1516,8 @@ void ext4_kernel_dev_found(const char* dev, int partition_number)
 {
 	found_kernel_device = 1;
 	kernel_flash_mode = TARBZ2;
-	sprintf(kernel_device, "%sp%d", dev, partition_number);
+	const char* separator = dev[strlen(dev) - 1] >= '0' && dev[strlen(dev) - 1] <= '9' ? "p" : "";
+	snprintf(kernel_device, sizeof(kernel_device), "%s%s%d", dev, separator, partition_number);
 	my_printf("Using %s as kernel device\n", kernel_device);
 }
 
@@ -1536,7 +1525,8 @@ void ext4_rootfs_dev_found(const char* dev, int partition_number)
 {
 	found_rootfs_device = 1;
 	rootfs_flash_mode = TARBZ2;
-	sprintf(rootfs_device, "%sp%d", dev, partition_number);
+	const char* separator = dev[strlen(dev) - 1] >= '0' && dev[strlen(dev) - 1] <= '9' ? "p" : "";
+	snprintf(rootfs_device, sizeof(rootfs_device), "%s%s%d", dev, separator, partition_number);
 	my_printf("Using %s as rootfs device\n", rootfs_device);
 }
 
@@ -1628,11 +1618,87 @@ void readProcCmdline()
 	fclose(f);
 }
 
-void find_kernel_rootfs_device()
+static int find_dream_devices(void)
+{
+	char actual_device[1000], actual_subdir[1000];
+	struct stat current_stat, target_stat;
+	FILE *mounts;
+	struct mntent *entry;
+
+	if (android || !strcmp(kexec_mode, "1") || strcmp(slotname, "linuxrootfs") ||
+	    (user_kernel && strcmp(kernel_device_arg, "mmcblk0"))) {
+		my_printf("Dream: bank A uses /dev/mmcblk0 with a fixed offset; incompatible kernel override or boot mode\n");
+		return 0;
+	}
+	if (!dream_kernel_running_root(actual_device, sizeof(actual_device), actual_subdir, sizeof(actual_subdir)))
+		return 0;
+	if (flash_rootfs && !user_rootfs && strcmp(actual_device, "/dev/mmcblk0p1")) {
+		my_printf("Dream: external running root; explicitly select the rootfs device\n");
+		return 0;
+	}
+	if ((rootsubdir_check && actual_subdir[0]) ||
+	    (multiboot_partition != -1 && !actual_subdir[0])) {
+		my_printf("Dream: requested rootfs mode does not match the mounted Chkroot layout\n");
+		return 0;
+	}
+	strcpy(current_rootfs_device, actual_device);
+	strcpy(current_rootfs_sub_dir, actual_subdir);
+	if (multiboot_partition == -1)
+		strcpy(rootfs_sub_dir, actual_subdir);
+	else
+		snprintf(rootfs_sub_dir, sizeof(rootfs_sub_dir), "linuxrootfs%d", multiboot_partition);
+	if (user_rootfs) {
+		if (strlen(rootfs_device_arg) > sizeof(rootfs_device) - sizeof("/dev/"))
+			return 0;
+		strcpy(rootfs_device, "/dev/");
+		strcat(rootfs_device, rootfs_device_arg);
+	} else
+		strcpy(rootfs_device, "/dev/mmcblk0p1");
+	if (flash_rootfs && (stat(rootfs_device, &target_stat) || !S_ISBLK(target_stat.st_mode)))
+		return 0;
+	if (flash_rootfs && user_rootfs && multiboot_partition == -1 && actual_subdir[0] &&
+	    strcmp(rootfs_device, actual_device)) {
+		my_printf("Dream: an explicit target slot is required for a different Chkroot device\n");
+		return 0;
+	}
+	stop_e2_needed = force_e2_stop ||
+		(!stat("/", &current_stat) && flash_rootfs &&
+		 current_stat.st_dev == target_stat.st_rdev && !strcmp(actual_subdir, rootfs_sub_dir));
+	/* A journal-aborted root must not reach the destructive flash phase. */
+	if (flash_rootfs && !no_write) {
+		mounts = setmntent("/proc/mounts", "r");
+		if (!mounts) {
+			my_printf("Dream: cannot check rootfs mount state\n");
+			return 0;
+		}
+		while ((entry = getmntent(mounts))) {
+			struct stat mounted;
+			if (hasmntopt(entry, "ro") && !stat(entry->mnt_fsname, &mounted) &&
+			    S_ISBLK(mounted.st_mode) && mounted.st_rdev == target_stat.st_rdev) {
+				my_printf("Dream: target rootfs is mounted read-only; resolve its filesystem/device error before flashing\n");
+				endmntent(mounts);
+				return 0;
+			}
+		}
+		endmntent(mounts);
+	}
+	chkroot_mode = actual_subdir[0] != '\0';
+	strcpy(kernel_device, "/dev/mmcblk0");
+	kernel_flash_mode = DREAM_KERNEL_A;
+	rootfs_flash_mode = TARBZ2;
+	found_kernel_device = found_rootfs_device = 1;
+	my_printf("Dream: actual root %s/%s, target root %s/%s; all Chkroot slots share kernel A\n",
+	          actual_device, actual_subdir, rootfs_device, rootfs_sub_dir);
+	return dream_kernel_check_device();
+}
+
+int find_kernel_rootfs_device()
 {
 	int mtd_kernel_found = found_kernel_device;
 	// get kernel/rootfs from cmdline
 	readProcCmdline();
+	if (flash_kernel && dream_kernel_model(boxname))
+		return find_dream_devices();
 
 	if ((!found_kernel_device || !found_rootfs_device) && strcmp(kexec_mode, "1") != 0) // Both kernel and rootfs needs to be found. Otherwise ignore found devices
 	{
@@ -1650,7 +1716,7 @@ void find_kernel_rootfs_device()
 
 		my_printf("Execute: fdisk -l\n");
 		if (fdisk_main(argc, argv) != 0)
-			return;
+			return 0;
 	}
 
 	if (!found_kernel_device && mtd_kernel_found)
@@ -1717,7 +1783,7 @@ void find_kernel_rootfs_device()
 		{
 			found_rootfs_device = 0;
 			my_printf("Error: In case of rootSubDir multiboot with user defined rootfs -m parameter is mandatory\n", rootfs_device);
-			return;
+			return 0;
 		}
 
 		found_rootfs_device = 1;
@@ -1831,6 +1897,7 @@ void find_kernel_rootfs_device()
 		stop_neutrino_needed = 0;
 		my_printf("Flashing currently not running image\n");
 	}
+	return 1;
 }
 
 // Checks whether kernel and rootfs device is bigger than the kernel and rootfs file
@@ -1900,11 +1967,22 @@ void handle_busybox_fatal_error()
 
 int main(int argc, char *argv[])
 {
+	if (argc == 2 && !strcmp(argv[1], "--features")) {
+		printf("dream-kernel-a\ndream-kernel-a-backup\n");
+		return EXIT_SUCCESS;
+	}
 	// Check if running on a box or on a PC. Stop working on PC to prevent overwriting important files
 #if defined(__i386) || defined(__x86_64__)
 	my_printf("You're running ofgwrite on a PC. Aborting...\n");
 	exit(EXIT_FAILURE);
 #endif
+	if (argc >= 2 && !strcmp(argv[1], "--backup-dream-kernel-a")) {
+		if (argc != 3) {
+			fprintf(stderr, "Usage: ofgwrite_bin --backup-dream-kernel-a NEW-DIRECTORY\n");
+			return EXIT_FAILURE;
+		}
+		return dream_kernel_backup_a(argv[2]) ? EXIT_SUCCESS : EXIT_FAILURE;
+	}
 
 	strcpy(vumodel, "");
 	FILE *fvu = fopen("/proc/stb/info/vumodel", "r");
@@ -1949,7 +2027,8 @@ int main(int argc, char *argv[])
 	// find kernel and rootfs devices
 	my_printf("\n");
 	read_mtd_file();
-	find_kernel_rootfs_device();
+	if (!find_kernel_rootfs_device())
+		return EXIT_FAILURE;
 
 	if (flash_kernel && (!found_kernel_device || kernel_filename[0] == '\0'))
 	{
@@ -1975,6 +2054,16 @@ int main(int argc, char *argv[])
 
 	if (!check_device_size())
 		return EXIT_FAILURE;
+
+	if (kernel_flash_mode == DREAM_KERNEL_A) {
+		atexit(dream_kernel_cleanup);
+		if (!dream_kernel_prepare(boxname, kernel_filename))
+			return EXIT_FAILURE;
+		if (no_write) {
+			my_printf("Dream: validated bank A plan only; no device writes, mounts, process stops or reboot\n");
+			return EXIT_SUCCESS;
+		}
+	}
 
 	my_printf("\n");
 
@@ -2096,13 +2185,17 @@ int main(int argc, char *argv[])
 			// mount rootfs device
 			if (rootfs_flash_mode == TARBZ2_MTD) // box with mtd subdir feature e.g. sfx6008
 				ret = mount(ubi_fs_name, "/oldroot_remount/", "ubifs", 0, NULL);
+			else if (chkroot_mode == 1)
+				/* Chkroot targets are external Linux partitions.  Do not reuse
+				 * the filesystem type of the currently running UBI rootfs. */
+				ret = mount(rootfs_device, "/oldroot_remount/", "ext4", 0, NULL);
 			else if (rootfs_flash_mode == UBI_LOOP_SUBDIR || rootfs_flash_mode == TARXZ_UBI) // ubi box with subdir feature on external device (USB, SATA,...)
 				ret = mount(rootfs_device, "/oldroot_remount/", "ext4", 0, NULL);
 			else
 				ret = mount(rootfs_device, "/oldroot_remount/", rootfs_fs_type, 0, NULL);
 			if (!ret)
 				my_printf("Mount to /oldroot_remount/ successful\n");
-			else if (errno == EINVAL && rootfs_flash_mode != TARBZ2_MTD && rootfs_flash_mode != UBI_LOOP_SUBDIR && rootfs_flash_mode != TARXZ_UBI)
+			else if (errno == EINVAL && chkroot_mode != 1 && rootfs_flash_mode != TARBZ2_MTD && rootfs_flash_mode != UBI_LOOP_SUBDIR && rootfs_flash_mode != TARXZ_UBI)
 			{
 				// most likely partition is not formatted -> format it
 				char mkfs_cmd[100];

@@ -35,7 +35,7 @@ enum RootfsTypeEnum
 
 enum FlashModeTypeEnum
 {
-	FLASH_MODE_UNKNOWN, MTD, TARBZ2, TARBZ2_MTD, UBI_LOOP_SUBDIR, TARXZ_UBI
+	FLASH_MODE_UNKNOWN, MTD, TARBZ2, TARBZ2_MTD, UBI_LOOP_SUBDIR, TARXZ_UBI, DREAM_KERNEL_A
 };
 // TARBZ2, TARBZ2_MTD is also used for xz compressed rootfs
 
@@ -76,4 +76,3 @@ int ubiattach_main(int argc, char **argv);
 int flashcp_main(int argc, char **argv);
 int cp_main(int argc, char **argv);
 int losetup_main(int argc, char **argv);
-
