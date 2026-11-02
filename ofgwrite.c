@@ -1039,7 +1039,8 @@ int exec_ps()
 	};
 	int argc = (int)(sizeof(argv) / sizeof(argv[0])) - 1;
 
-	my_printf("Execute: ps\n");
+	if (!quiet) //NI
+		my_printf("Execute: ps\n");
 	if (ps_main(argc, argv) == 9999)
 	{
 		return 1; // neutrino found

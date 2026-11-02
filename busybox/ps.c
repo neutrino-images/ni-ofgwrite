@@ -800,8 +800,15 @@ int ps_main(int argc UNUSED_PARAM, char **argv UNUSED_PARAM)
 
 		{
 			// changed for ofgwrite
+			/*
+			   Free the scan when leaving early, else every call leaks the
+			   open /proc directory, and ofgwrite polls once a second.
+			*/
 			if (strcmp(p->comm, "neutrino") == 0)
+			{
+				free_procps_scan(p);
 				return 9999;
+			}
 			int sz = terminal_width - len;
 			if (sz >= 0) {
 				char buf[sz + 1];
