@@ -1059,15 +1059,7 @@ int check_neutrino_stopped()
 		my_printf("Checking Neutrino is running...\n");
 	while (time < max_time && neutrino_found)
 	{
-		//NI neutrino_found = exec_ps(); //FIXME
-
-		//NI
-		system("killall start_neutrino 2>/dev/null");
-		int ret = system("pidof neutrino >/dev/null");
-		if (ret == 0)
-			neutrino_found = system("killall neutrino && sleep 3");
-		else
-			neutrino_found = 0;
+		neutrino_found = exec_ps();
 
 		if (!neutrino_found)
 		{
@@ -1086,20 +1078,6 @@ int check_neutrino_stopped()
 
 	if (neutrino_found)
 		return 0;
-	else
-	{
-		/*
-		   Reactivate correct input to make ofgrite visible again.
-		   libstb-hal set input to "aux" when cVideo is deleted.
-		*/
-		FILE *f;
-		f = fopen("/proc/stb/avs/0/input","w");
-		if (f != NULL)
-		{
-			fputs("encoder", f);
-			fclose(f);
-		}
-	}
 
 	return 1;
 }
