@@ -1640,7 +1640,7 @@ static int find_dream_devices(void)
 		my_printf("Dream: an explicit target slot is required for a different Chkroot device\n");
 		return 0;
 	}
-	stop_e2_needed = force_e2_stop ||
+	stop_neutrino_needed = force_neutrino_stop ||
 		(!stat("/", &current_stat) && flash_rootfs &&
 		 current_stat.st_dev == target_stat.st_rdev && !strcmp(actual_subdir, rootfs_sub_dir));
 	/* A journal-aborted root must not reach the destructive flash phase. */
